@@ -376,7 +376,7 @@
     </div>
 
     {{-- Photo Modal --}}
-    <div class="photo-modal-overlay" id="photoModal">
+    {{-- <div class="photo-modal-overlay" id="photoModal">
         <div class="photo-modal-box">
             <button class="photo-modal-close"
                     onclick="document.getElementById('photoModal').classList.remove('open')">
@@ -386,7 +386,7 @@
             <div class="photo-modal-name" id="modalName"></div>
             <div class="photo-modal-empid" id="modalEmpId"></div>
         </div>
-    </div>
+    </div> --}}
 
 @endsection
 
