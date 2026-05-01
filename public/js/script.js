@@ -10,7 +10,17 @@ $(document).ready(function() {
         this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10);
     });
 
-    $("#loginForm").validate({
+    $(".toggle-password").click(function() {
+        $(this).toggleClass("fa-eye-slash fa-eye");
+        var input = $(this).siblings("input");
+        if (input.attr("type") === "password") {
+            input.attr("type", "text");
+        } else {
+            input.attr("type", "password");
+        }
+    });
+
+    $("#employeeLoginForm").validate({
         rules: {
             employee_code: {
                 required: true,
@@ -23,26 +33,16 @@ $(document).ready(function() {
         },
         messages: {
             employee_code: {
-                required: "Please enter your Employee Code",
-                minlength: "Employee Code must be at least 3 characters long"
+                required: "Please enter your employee code",
+                minlength: "Employee code must be at least 3 characters"
             },
             password: {
-                required: "Please provide a password",
-                minlength: "Password must be at least 6 characters long"
+                required: "Please enter your password",
+                minlength: "Password must be at least 6 characters"
             }
         },
-        errorElement: 'div',
-        errorPlacement: function (error, element) {
-            error.addClass('invalid-feedback text-start');
-            element.closest('.mb-4').append(error);
-        },
-        highlight: function (element, errorClass, validClass) {
-            $(element).addClass('is-invalid');
-            $(element).closest('.input-group-custom').addClass('is-invalid-group');
-        },
-        unhighlight: function (element, errorClass, validClass) {
-            $(element).removeClass('is-invalid');
-            $(element).closest('.input-group-custom').removeClass('is-invalid-group');
+        errorPlacement: function(error, element) {
+            error.insertAfter(element.parent(".icon-input-wrapper"));
         }
     });
 
@@ -115,7 +115,7 @@ $(document).ready(function() {
             $('#msl').val(doc ? doc.msl_number : '');
         });
     }
-
+    
     $('#photoInput').on('change', function() {
         if (this.files && this.files[0]) {
             $('#uploadText').text(this.files[0].name);
