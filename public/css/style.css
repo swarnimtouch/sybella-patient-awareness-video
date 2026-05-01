@@ -1,128 +1,133 @@
 .login-page-bg {
     background: radial-gradient(circle at center, #dcedfb 0%, #b3d7f6 100%);
     min-height: 100vh;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Poppins', sans-serif;
 }
 
-.login-card {
-    border-radius: 15px;
+.auth-card {
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border: 1.5px solid #204e8a;
+    max-width: 420px;
+    width: 100%;
     background: #ffffff;
-    border: 2px solid #0d6efd;
 }
 
-.login-logo {
-    max-width: 140px;
+.video-auth-card {
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border: 1.5px solid #204e8a;
+    width: 100%;
+    background: #ffffff;
+}
+
+.auth-logo {
+    max-width: 150px;
     height: auto;
-    margin: 0 auto;
-    display: block;
-    filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.06));
 }
 
-.input-group-custom {
-    border-radius: 8px;
-    background-color: #f8f9fa;
-    border: 1px solid #ced4da;
+.auth-title {
+    color: #204e8a;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.auth-form-label {
+    color: #204e8a;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.icon-input-wrapper {
+    position: relative;
+}
+
+.icon-input-wrapper .left-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #204e8a;
+    font-size: 14px;
+    z-index: 4;
+}
+
+.icon-input-wrapper .toggle-password {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #204e8a;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 5;
+    transition: color 0.3s;
+}
+
+.icon-input-wrapper .toggle-password:hover {
+    color: #3461a3;
+}
+
+.icon-input-wrapper .form-control,
+.icon-input-wrapper .form-select {
+    padding-left: 45px;
+    font-size: 14px;
+    border-color: #cbd5e1;
+}
+
+.icon-input-wrapper #password {
+    padding-right: 40px;
+}
+
+.icon-input-wrapper .form-control:focus,
+.icon-input-wrapper .form-select:focus {
+    border-color: #204e8a;
+    box-shadow: 0 0 0 0.2rem rgba(32, 78, 138, 0.25);
+}
+
+.btn-submit-auth {
+    background-color: #3461a3;
+    color: #ffffff;
+    font-weight: 600;
+    letter-spacing: 0.5px;
     transition: all 0.3s ease;
-    display: flex;
-    overflow: hidden;
-}
-
-.input-group-custom:focus-within {
-    border-color: #5b9bd5;
-    box-shadow: 0 0 0 0.25rem rgba(91, 155, 213, 0.25);
-    background-color: #ffffff;
-}
-
-.input-group-custom.is-invalid-group {
-    border-color: #dc3545;
-    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
-}
-
-.icon-box {
-    padding: 12px 15px;
-    color: #6c757d;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-}
-
-.custom-input {
     border: none;
-    background-color: transparent;
-    padding: 12px 15px 12px 0;
-    box-shadow: none !important;
 }
 
-.custom-input:focus {
-    background-color: transparent;
+.btn-submit-auth:hover {
+    background-color: #204e8a;
+    color: #ffffff;
 }
 
-.custom-input.form-select {
-    padding-right: 2.5rem;
+label.error {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+    font-weight: 500;
 }
 
-.custom-input.form-select.is-invalid {
-    background-position: right 2.25rem center, right 0.75rem center !important;
-}
-
-.custom-input.is-invalid {
-    padding-right: 2.5rem !important;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e") !important;
-    background-repeat: no-repeat !important;
-    background-position: right 0.75rem center !important;
-    background-size: 1rem 1rem !important;
+.form-control.error,
+.form-select.error {
+    border-color: #dc3545;
 }
 
 .upload-box {
-    background-color: #e9f3ff;
-    border: 2px dashed #0d6efd;
+    background-color: #f8fafc;
+    border: 2px dashed #204e8a;
     border-radius: 12px;
     transition: all 0.3s ease;
 }
 
 .upload-box:hover {
-    background-color: #dcedfb;
-    border-color: #0b5ed7;
+    background-color: #e2e8f0;
+    border-color: #3461a3;
 }
 
 .upload-box.is-invalid-box {
     border-color: #dc3545;
     background-color: #f8d7da;
-}
-
-.btn-login {
-    background: linear-gradient(135deg, #0d6efd, #0b5ed7);
-    border: none;
-    border-radius: 8px;
-    padding: 12px;
-    font-size: 16px;
-    letter-spacing: 0.5px;
-    transition: all 0.3s ease;
-    color: #ffffff;
-}
-
-.btn-login:hover {
-    background: linear-gradient(135deg, #0b5ed7, #0a58ca);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 15px rgba(13, 110, 253, 0.3);
-    color: #ffffff;
-}
-
-.btn-login:active {
-    transform: translateY(0);
-}
-
-.invalid-feedback {
-    font-size: 0.875em;
-    font-weight: 500;
-    margin-top: 0.3rem;
-    display: block !important;
-    color: #dc3545;
-}
-
-.upload-label {
-    letter-spacing: 0.5px;
 }
 
 .upload-input {
@@ -132,6 +137,7 @@
 
 .upload-icon {
     font-size: 2.8rem;
+    color: #204e8a;
 }
 
 .btn-logout {
