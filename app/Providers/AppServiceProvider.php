@@ -1,6 +1,9 @@
 <?php
 
 namespace App\Providers;
+use App\Models\User;
+use App\Models\UserFile;
+use Illuminate\Support\Facades\View;
 
 use Illuminate\Support\ServiceProvider;
 
@@ -17,8 +20,14 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot()
     {
-        //
+        View::composer('*', function ($view) {
+            $view->with([
+                'employeeCount' => User::where('type', 'employee')->count(),
+                'doctorCount' => User::where('type', 'doctor')->count(),
+                'bannerCount' => UserFile::count(),
+            ]);
+        });
     }
 }

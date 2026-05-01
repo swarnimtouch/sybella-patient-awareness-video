@@ -22,6 +22,18 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'employee_code',
+        'type',
+        'mobile',
+        'speciality',
+        'hospital_name',
+        'address',
+        'profile_image',
+        'banner_path',
+        'video',
+        'msl_number',
+        'language',
+        'parent_id'
     ];
 
     /**
@@ -45,5 +57,13 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+    public function userFile()
+    {
+        return $this->hasOne(UserFile::class, 'user_id');
+    }
+    public function employee()
+    {
+        return $this->belongsTo(User::class, 'parent_id');
     }
 }
