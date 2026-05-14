@@ -17,9 +17,14 @@ return new class extends Migration {
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->string('employee_code')->nullable();
+            $table->string('position_code')->nullable();
+            $table->string('designation')->nullable();
+            $table->string('hq_name')->nullable();
+            $table->string('hq_name')->nullable();
             $table->enum('type', ['doctor', 'employee', 'admin'])->default('doctor');
             $table->string('mobile')->nullable();
             $table->string('speciality')->nullable();
+            $table->string('speciality_code')->nullable();
             $table->string('hospital_name')->nullable();
             $table->string('address')->nullable();
             $table->string('profile_image')->nullable();
