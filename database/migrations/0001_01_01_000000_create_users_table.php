@@ -20,7 +20,7 @@ return new class extends Migration {
             $table->string('position_code')->nullable();
             $table->string('designation')->nullable();
             $table->string('hq_name')->nullable();
-            $table->string('hq_name')->nullable();
+            $table->string('hq_code')->nullable();
             $table->enum('type', ['doctor', 'employee', 'admin'])->default('doctor');
             $table->string('mobile')->nullable();
             $table->string('speciality')->nullable();
