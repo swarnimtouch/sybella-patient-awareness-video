@@ -25,6 +25,7 @@ return new class extends Migration {
             $table->string('profile_image')->nullable();
             $table->string('language')->nullable();
             $table->string('msl_number')->nullable();
+            $table->string('city')->nullable();
             $table->unsignedBigInteger('parent_id')->nullable();
             $table->foreign('parent_id')->references('id')->on('users')->onDelete('set null');
 

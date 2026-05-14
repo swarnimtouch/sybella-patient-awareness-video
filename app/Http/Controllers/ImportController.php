@@ -16,8 +16,13 @@ class ImportController extends Controller
 
     public function importUsers(Request $request)
     {
-        Excel::import(new UsersImport, $request->file('file'));
+        set_time_limit(0);
+        ini_set('memory_limit', '512M');
 
-        return back()->with('success', 'Users Imported Successfully');
+        $type = $request->input('import_type', 'employee'); // 'employee' ya 'doctor'
+
+        Excel::import(new UsersImport($type), $request->file('file'));
+
+        return back()->with('success', ucfirst($type) . 's imported successfully!');
     }
 }

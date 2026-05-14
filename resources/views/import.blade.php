@@ -27,19 +27,16 @@
             <form action="{{ route('users.import') }}" method="POST" enctype="multipart/form-data">
                 @csrf
 
-                <div class="mb-3">
-                    <label class="form-label">Select Excel File</label>
-                    <input type="file" name="file" class="form-control" accept=".xlsx,.xls,.csv" required>
-                </div>
+                <!-- Type select karo -->
+                <select name="import_type">
+                    <option value="employee">Employee</option>
+                    <option value="doctor">Doctor</option>
+                </select>
 
-                <button type="submit" class="btn btn-success">
-                    Import Users
-                </button>
+                <!-- File -->
+                <input type="file" name="file" accept=".xlsx,.xls,.csv" required>
 
-                <a href="{{ asset('users_import_sample.xlsx') }}" class="btn btn-info">
-                    Download Sample
-                </a>
-
+                <button type="submit">Import</button>
             </form>
 
         </div>
