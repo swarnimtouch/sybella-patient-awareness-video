@@ -129,6 +129,17 @@
                         </td>
                     </tr>
                 @endforelse
+
+                {{-- Shown by JS when live search finds no match --}}
+                <tr id="noSearchResults" style="display:none;">
+                    <td colspan="15">
+                        <div class="empty-state">
+                            <i class="fas fa-user-md"></i>
+                            <h5>No records found</h5>
+                            <p>No doctor matches your search</p>
+                        </div>
+                    </td>
+                </tr>
                 </tbody>
             </table>
         </div>
@@ -344,6 +355,15 @@
             </div>
         @endforelse
 
+        {{-- Shown by JS when live search finds no match (mobile) --}}
+        <div class="glass-card" id="noSearchResultsMobile" style="display:none;">
+            <div class="empty-state">
+                <i class="fas fa-user-md"></i>
+                <h5>No records found</h5>
+                <p>No doctor matches your search</p>
+            </div>
+        </div>
+
         @if($doctors->hasPages())
             <div class="pagination-wrap" style="border:none;padding:4px 0 16px;">
                 <div class="page-info">
@@ -376,7 +396,7 @@
     </div>
 
     {{-- Photo Modal --}}
-    {{-- <div class="photo-modal-overlay" id="photoModal">
+    <div class="photo-modal-overlay" id="photoModal" style="display:none;">
         <div class="photo-modal-box">
             <button class="photo-modal-close"
                     onclick="document.getElementById('photoModal').classList.remove('open')">
@@ -386,9 +406,21 @@
             <div class="photo-modal-name" id="modalName"></div>
             <div class="photo-modal-empid" id="modalEmpId"></div>
         </div>
-    </div> --}}
+    </div>
 
 @endsection
+
+@push('styles')
+    <style>
+        /* Ensures the photo modal stays hidden until explicitly opened */
+        .photo-modal-overlay { display: none; }
+        .photo-modal-overlay.open {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+@endpush
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -399,7 +431,10 @@
                 document.getElementById('photoModal').classList.remove('open');
             }
         }
-        document.getElementById('photoModal').addEventListener('click', closePhotoModal);
+        const photoModal = document.getElementById('photoModal');
+        if (photoModal) {
+            photoModal.addEventListener('click', closePhotoModal);
+        }
 
         // DELETE CONFIRM
         document.addEventListener('click', function (e) {
@@ -454,28 +489,58 @@
         });
         @endif
 
-        // LIVE SEARCH
+        // CLIENT-SIDE LIVE SEARCH (URL stays unchanged)
         (function () {
             const input   = document.getElementById('liveSearch');
             const spinner = document.getElementById('searchSpinner');
             if (!input) return;
-            let timer = null;
-            input.addEventListener('keyup', function () {
-                clearTimeout(timer);
-                const query = this.value.trim();
-                spinner.style.display = 'block';
-                timer = setTimeout(function () {
-                    const baseUrl = '{{ route('admin.doctors.index') }}';
-                    window.location.href = query.length > 0
-                        ? baseUrl + '?search=' + encodeURIComponent(query)
-                        : baseUrl;
-                }, 400);
+
+            const desktopRows = Array.from(document.querySelectorAll('.desktop-view tbody tr'))
+                .filter(row => !row.querySelector('.empty-state') && row.id !== 'noSearchResults');
+            const mobileCards = Array.from(document.querySelectorAll('.mobile-view .m-card'));
+            const pagination  = document.querySelectorAll('.pagination-wrap');
+
+            const noResultsRow    = document.getElementById('noSearchResults');
+            const noResultsMobile = document.getElementById('noSearchResultsMobile');
+
+            input.value = '';
+            input.addEventListener('input', function () {
+                const query = this.value.trim().toLocaleLowerCase();
+                if (spinner) spinner.style.display = 'block';
+
+                let visibleDesktop = 0;
+                desktopRows.forEach(row => {
+                    const match = row.textContent.toLocaleLowerCase().includes(query);
+                    row.style.display = match ? '' : 'none';
+                    if (match) visibleDesktop++;
+                });
+
+                let visibleMobile = 0;
+                mobileCards.forEach(card => {
+                    const match = card.textContent.toLocaleLowerCase().includes(query);
+                    card.style.display = match ? '' : 'none';
+                    if (match) visibleMobile++;
+                });
+
+                pagination.forEach(item => {
+                    item.style.display = query ? 'none' : '';
+                });
+
+                if (noResultsRow) {
+                    noResultsRow.style.display = (query && visibleDesktop === 0) ? '' : 'none';
+                }
+                if (noResultsMobile) {
+                    noResultsMobile.style.display = (query && visibleMobile === 0) ? '' : 'none';
+                }
+
+                if (spinner) spinner.style.display = 'none';
             });
         })();
 
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
-                document.getElementById('photoModal').classList.remove('open');
+                const modal = document.getElementById('photoModal');
+                if (modal) modal.classList.remove('open');
             }
         });
     </script>

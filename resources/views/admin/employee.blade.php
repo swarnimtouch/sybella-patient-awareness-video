@@ -109,6 +109,17 @@
                         </td>
                     </tr>
                 @endforelse
+
+                {{-- Shown by JS when live search finds no match --}}
+                <tr id="noSearchResults" style="display:none;">
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i class="fas fa-users"></i>
+                            <h5>No records found</h5>
+                            <p>No employee matches your search</p>
+                        </div>
+                    </td>
+                </tr>
                 </tbody>
             </table>
         </div>
@@ -233,6 +244,15 @@
             </div>
         @endforelse
 
+        {{-- Shown by JS when live search finds no match (mobile) --}}
+        <div class="glass-card" id="noSearchResultsMobile" style="display:none;">
+            <div class="empty-state">
+                <i class="fas fa-users"></i>
+                <h5>No records found</h5>
+                <p>No employee matches your search</p>
+            </div>
+        </div>
+
         @if($employees->hasPages())
             <div class="pagination-wrap" style="border:none; padding:4px 0 16px;">
                 <div class="page-info">
@@ -330,24 +350,52 @@
         @endif
 
         // ══════════════════════════════════════
-        // LIVE SEARCH
+        // CLIENT-SIDE LIVE SEARCH (URL stays unchanged)
         // ══════════════════════════════════════
         (function () {
             const input   = document.getElementById('liveSearch');
             const spinner = document.getElementById('searchSpinner');
             if (!input) return;
-            let timer = null;
-            input.addEventListener('keyup', function () {
-                clearTimeout(timer);
-                const query = this.value.trim();
-                spinner.style.display = 'block';
-                timer = setTimeout(function () {
-                    const baseUrl = '{{ route('admin.employees.index') }}';
-                    const url = query.length > 0
-                        ? baseUrl + '?search=' + encodeURIComponent(query)
-                        : baseUrl;
-                    window.location.href = url;
-                }, 400);
+
+            const desktopRows = Array.from(document.querySelectorAll('.desktop-view tbody tr'))
+                .filter(row => !row.querySelector('.empty-state') && row.id !== 'noSearchResults');
+            const mobileCards = Array.from(document.querySelectorAll('.mobile-view .m-card'));
+            const pagination  = document.querySelectorAll('.pagination-wrap');
+
+            const noResultsRow    = document.getElementById('noSearchResults');
+            const noResultsMobile = document.getElementById('noSearchResultsMobile');
+
+            input.value = '';
+            input.addEventListener('input', function () {
+                const query = this.value.trim().toLocaleLowerCase();
+                if (spinner) spinner.style.display = 'block';
+
+                let visibleDesktop = 0;
+                desktopRows.forEach(row => {
+                    const match = row.textContent.toLocaleLowerCase().includes(query);
+                    row.style.display = match ? '' : 'none';
+                    if (match) visibleDesktop++;
+                });
+
+                let visibleMobile = 0;
+                mobileCards.forEach(card => {
+                    const match = card.textContent.toLocaleLowerCase().includes(query);
+                    card.style.display = match ? '' : 'none';
+                    if (match) visibleMobile++;
+                });
+
+                pagination.forEach(item => {
+                    item.style.display = query ? 'none' : '';
+                });
+
+                if (noResultsRow) {
+                    noResultsRow.style.display = (query && visibleDesktop === 0) ? '' : 'none';
+                }
+                if (noResultsMobile) {
+                    noResultsMobile.style.display = (query && visibleMobile === 0) ? '' : 'none';
+                }
+
+                if (spinner) spinner.style.display = 'none';
             });
         })();
     </script>

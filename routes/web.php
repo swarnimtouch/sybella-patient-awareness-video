@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\Route;
 //    return view('welcome');
 //});
 
-
+Route::get('/admin', function () {
+    return redirect()->route('admin.login');
+});
 Route::get('/employee', [ImportController::class, 'import'])->name('employee');
 Route::post('/import-users', [ImportController::class, 'importUsers'])->name('users.import');
 

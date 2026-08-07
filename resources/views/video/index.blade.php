@@ -94,12 +94,15 @@
                             <div class="icon-input-wrapper">
                                 <i class="fa-solid fa-language left-icon"></i>
                                 <select name="language" class="form-select py-2">
-                                    <option value="" selected disabled>-- Select Language --</option>
-                                    <option value="English">English</option>
-                                    <option value="Hindi">Hindi</option>
-                                    <option value="Marathi">Marathi</option>
+                                    <option value="" disabled {{ old('language') ? '' : 'selected' }}>-- Select Language --</option>
+                                    <option value="English" {{ old('language') === 'English' ? 'selected' : '' }}>English</option>
+                                    <option value="Hindi" {{ old('language') === 'Hindi' ? 'selected' : '' }}>Hindi</option>
+                                    <option value="Marathi" {{ old('language') === 'Marathi' ? 'selected' : '' }}>Marathi</option>
                                 </select>
                             </div>
+                            @error('language')
+                                <div class="text-danger small mt-1">{{ $message }}</div>
+                            @enderror
                         </div>
 
                         <div class="col-md-12 mb-4">
