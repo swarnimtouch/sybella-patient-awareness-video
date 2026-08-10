@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\UserFile;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class VideoController extends Controller
@@ -14,16 +15,12 @@ class VideoController extends Controller
     // CONFIG — naya frame.jpg 8000x4500 ka hai. In values ko bharo.
     // ─────────────────────────────────────────────────────────────────
 
-    // TODO: Photoshop se circle (photo/video area) ke exact bounds nikalo
-    // aur yaha daalo. Jab tak ye 0 hai, code chalega nahi (crash karega).
     private const CIRCLE_X = 233;
     private const CIRCLE_Y = 2070;
     private const CIRCLE_W = 1592;
     private const CIRCLE_H = 1592;
     private const CIRCLE_RIM = 140;
 
-    // Video (moving clip) ka area circle se alag/bada hai.
-    // TODO: VIDEO_Y confirm karo Photoshop se — abhi 0 placeholder hai.
     private const VIDEO_X = 1385;
     private const VIDEO_Y = 0;
     private const VIDEO_W = 6615;
@@ -39,12 +36,19 @@ class VideoController extends Controller
     private const MASTER_H = 4500;
 
     private const FONT_PATH = '';
+    private const FONT_BOLD_PATH = '';
+    private const FONT_REGULAR_PATH = '';
 
     private const LANGUAGE_VIDEOS = [
         'English' => 'video/frame.mp4',
         'Hindi' => 'video/frame.mp4',
         'Marathi' => 'video/frame.mp4',
     ];
+
+    // ─── S3 CONFIG ──────────────────────────────────────────────────
+    // Sab kuch is bucket-folder ke andar jayega: sybella-patient-awareness-video/{uploads,banners,videos}
+    private const S3_DISK   = 's3';
+    private const S3_FOLDER = 'sybella-patient-awareness-video';
 
     public function index()
     {
@@ -61,6 +65,10 @@ class VideoController extends Controller
     {
         set_time_limit(300);
         ini_set('max_execution_time', 300);
+        // 8000x4500 truecolor image akela ~144MB leta hai, aur is process me
+        // ek saath kai aisi images (frame, frameLayer, photo, resized) memory me
+        // hoti hain — isliye default 512M limit todna aam baat hai.
+        ini_set('memory_limit', '2048M');
 
         $request->validate([
             'doctor_id'        => 'required',
@@ -78,28 +86,38 @@ class VideoController extends Controller
 
         $frameMp4 = $this->resolveLanguageVideo($request->language);
 
-        $photoPath     = $request->file('photo')->store('uploads', 'public');
-        $photoFullPath = storage_path('app/public/' . $photoPath);
-
-        $frameJpg = public_path('video/frame.jpg'); // master, high-res (8000x4500)
-        $framePng = public_path('video/frame.png'); // transparent foreground frame
-
-        $fontPath = $this->resolveFontPath();
-
-        // ─── Banner Generate (GD, full high-res 8000x4500) ────────────
-        if (!is_dir(storage_path('app/public/banners'))) {
-            mkdir(storage_path('app/public/banners'), 0777, true);
+        // ─────────────────────────────────────────────────────────────
+        // Sab kuch pehle LOCAL scratch folder me generate hota hai
+        // (GD aur FFmpeg dono ko real file path chahiye — S3 se seedha
+        // kaam nahi karte). Aakhir me photo/banner/video S3 pe upload
+        // karke local temp copies delete kar denge.
+        // ─────────────────────────────────────────────────────────────
+        $tempDir = storage_path('app/tmp');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0777, true);
         }
 
+        $photoExt      = strtolower($request->file('photo')->getClientOriginalExtension());
+        $photoName     = 'photo_' . time() . '_' . uniqid() . '.' . $photoExt;
+        $photoFullPath = $tempDir . '/' . $photoName;
+        $request->file('photo')->move($tempDir, $photoName);
+
+        $framePng = public_path('video/frame.png'); // transparent foreground frame, app asset
+
+        $fontBold    = $this->resolveFontPath('bold');
+        $fontRegular = $this->resolveFontPath('regular');
+
+        // ─── Banner Generate (GD, full high-res 8000x4500) ────────────
+        // Banner download is disabled, so skip its expensive 8000x4500 render.
+        if (false) {
         $bannerName = 'banner_' . time() . '.png';
-        $bannerPath = storage_path('app/public/banners/' . $bannerName);
+        $bannerPath = $tempDir . '/' . $bannerName;
 
         $frameLayer = imagecreatefrompng($framePng);
         $frame = imagecreatetruecolor(self::MASTER_W, self::MASTER_H);
         $white = imagecolorallocate($frame, 255, 255, 255);
         imagefill($frame, 0, 0, $white);
-        $ext   = strtolower(pathinfo($photoFullPath, PATHINFO_EXTENSION));
-        $photo = ($ext === 'png')
+        $photo = ($photoExt === 'png')
             ? imagecreatefrompng($photoFullPath)
             : imagecreatefromjpeg($photoFullPath);
 
@@ -119,23 +137,25 @@ class VideoController extends Controller
         imagecopy($frame, $frameLayer, 0, 0, 0, 0, self::MASTER_W, self::MASTER_H);
 
         $black = imagecolorallocate($frame, 30, 30, 30);
-        $this->drawBannerText($frame, $fontPath, 'Dr. ' . ($doctor->name ?? ''), self::TEXT_DOCTOR, $black, 55);
-        $this->drawBannerText($frame, $fontPath, 'Name :', ['x' => 2700, 'y' => self::TEXT_NAME['y']], $black, 42);
-        $this->drawBannerText($frame, $fontPath, 'Hospital :', ['x' => 2700, 'y' => self::TEXT_HOSPITAL['y']], $black, 42);
-        $this->drawBannerText($frame, $fontPath, 'Mobile :', ['x' => 2700, 'y' => self::TEXT_MOBILE['y']], $black, 42);
-        $this->drawBannerText($frame, $fontPath, $doctor->name ?? '', self::TEXT_NAME, $black);
-        $this->drawBannerText($frame, $fontPath, $request->hospital_name, self::TEXT_HOSPITAL, $black);
-        $this->drawBannerText($frame, $fontPath, $request->mobile, self::TEXT_MOBILE, $black);
+        $this->drawBannerText($frame, $fontBold, 'Dr. ' . ($doctor->name ?? ''), self::TEXT_DOCTOR, $black, 55);
+        $this->drawBannerText($frame, $fontBold, 'Name :', ['x' => 2700, 'y' => self::TEXT_NAME['y']], $black, 42);
+        $this->drawBannerText($frame, $fontBold, 'Hospital :', ['x' => 2700, 'y' => self::TEXT_HOSPITAL['y']], $black, 42);
+        $this->drawBannerText($frame, $fontBold, 'Mobile :', ['x' => 2700, 'y' => self::TEXT_MOBILE['y']], $black, 42);
+        $this->drawBannerText($frame, $fontRegular, $doctor->name ?? '', self::TEXT_NAME, $black);
+        $this->drawBannerText($frame, $fontRegular, $request->hospital_name, self::TEXT_HOSPITAL, $black);
+        $this->drawBannerText($frame, $fontRegular, $request->mobile, self::TEXT_MOBILE, $black);
         imagesetthickness($frame, 5);
         imageline($frame, self::TEXT_NAME['x'], self::TEXT_NAME['y'] + 95, 5600, self::TEXT_NAME['y'] + 95, $black);
         imageline($frame, self::TEXT_HOSPITAL['x'], self::TEXT_HOSPITAL['y'] + 95, 5600, self::TEXT_HOSPITAL['y'] + 95, $black);
         imageline($frame, self::TEXT_MOBILE['x'], self::TEXT_MOBILE['y'] + 95, 5600, self::TEXT_MOBILE['y'] + 95, $black);
 
-        imagepng($frame, $bannerPath, 6);
+        // Faster lossless compression for this very large 8000x4500 banner.
+        imagepng($frame, $bannerPath, 1);
         imagedestroy($frame);
         imagedestroy($frameLayer);
         imagedestroy($photo);
         imagedestroy($resized);
+        }
 
         // ─── Detect real target resolution from frame.mp4 ─────────────
         exec(
@@ -144,28 +164,23 @@ class VideoController extends Controller
             $dimOut
         );
         $dims = array_pad(explode('x', trim($dimOut[0] ?? '848x480')), 2, null);
-        $outW = (int) ($dims[0] ?: 848);
-        $outH = (int) ($dims[1] ?: 480);
+        $sourceW = (int) ($dims[0] ?: 848);
+        $sourceH = (int) ($dims[1] ?: 480);
+        // 540p is a good mobile/web balance and leaves enough headroom for the
+        // complete request (render + S3 upload) to finish near the 1-minute goal.
+        $outW = min(960, $sourceW);
+        $outH = (int) round($sourceH * ($outW / $sourceW));
+        $outH -= $outH % 2;
 
-        // ─── Cached small background — generated ONCE, reused after ───
-        // Ye hi asli fix hai: 8000x4500 ko baar baar decode/scale karne
-        // ki bajaye, ek chhoti copy banake reuse karo.
-        $cacheDir = storage_path('app/public/cache');
+        // ─── Cached small background — LOCAL ONLY, generated ONCE, reused ──
+        // Ye purely performance ke liye hai (8000x4500 baar baar decode na
+        // ho). Ye kabhi S3 pe nahi jaata — koi user isse access nahi karta.
+        $cacheDir = storage_path('app/cache');
         if (!is_dir($cacheDir)) {
             mkdir($cacheDir, 0777, true);
         }
-        $smallBg = $cacheDir . "/frame_bg_{$outW}x{$outH}.jpg";
-
-        if (!file_exists($smallBg) || filemtime($smallBg) < filemtime($frameJpg)) {
-            $src   = imagecreatefromjpeg($frameJpg);
-            $small = imagecreatetruecolor($outW, $outH);
-            imagecopyresampled($small, $src, 0, 0, 0, 0, $outW, $outH, self::MASTER_W, self::MASTER_H);
-            imagejpeg($small, $smallBg, 90);
-            imagedestroy($src);
-            imagedestroy($small);
-        }
-
         // Uploaded photo is a transparent circular layer. frame.png supplies the rim/design above it.
+        // Ye bhi LOCAL cache hai (ffmpeg input ke liye), S3 pe nahi jaata.
         $circleOverlay = $cacheDir . '/circle_photo_' . md5($photoFullPath . filemtime($photoFullPath))
             . "_{$outW}x{$outH}.png";
         if (!file_exists($circleOverlay)) {
@@ -179,7 +194,8 @@ class VideoController extends Controller
         $vx = (int) round(self::VIDEO_X * $scaleX);
         $vy = (int) round(self::VIDEO_Y * $scaleY);
         $vw = (int) round(self::VIDEO_W * $scaleX);
-        $vh = (int) round(self::VIDEO_H * $scaleY);
+        // A tiny bottom overlap hides the white seam caused by scaled rounding.
+        $vh = (int) round(self::VIDEO_H * $scaleY) + 2;
 
         $tName     = ['x' => (int) round(self::TEXT_NAME['x'] * $scaleX),     'y' => (int) round(self::TEXT_NAME['y'] * $scaleY)];
         $tHospital = ['x' => (int) round(self::TEXT_HOSPITAL['x'] * $scaleX), 'y' => (int) round(self::TEXT_HOSPITAL['y'] * $scaleY)];
@@ -187,15 +203,19 @@ class VideoController extends Controller
         $tDoctor   = ['x' => (int) round(self::TEXT_DOCTOR['x'] * $scaleX),   'y' => (int) round(self::TEXT_DOCTOR['y'] * $scaleY)];
         $labelX = (int) round(2700 * $scaleX);
         $lineEndX = (int) round(5600 * $scaleX);
-        $lineOffset = max(2, (int) round(95 * $scaleY));
+        $lineOffset = max(2, (int) round(125 * $scaleY));
+        $lineThickness = max(1, (int) round(2 * ($outH / 1080)));
+
+        // The previous fixed 1080p font sizes became oversized at 540p.
+        $textScale = $outH / 1080;
+        $doctorFontSize = max(12, (int) round(25 * $textScale));
+        $labelFontSize = max(10, (int) round(20 * $textScale));
+        $nameFontSize = max(12, (int) round(25 * $textScale));
+        $detailFontSize = max(11, (int) round(22 * $textScale));
 
         // ─── Video Generate (FFmpeg) ────────────────────────────────────
-        if (!is_dir(storage_path('app/public/videos'))) {
-            mkdir(storage_path('app/public/videos'), 0777, true);
-        }
-
         $videoName = 'video_' . time() . '.mp4';
-        $videoPath = storage_path('app/public/videos/' . $videoName);
+        $videoPath = $tempDir . '/' . $videoName;
 
         exec(
             "ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "
@@ -205,7 +225,8 @@ class VideoController extends Controller
         $mp4Duration   = (float) ($probeOut[0] ?? 5);
         $totalDuration = $mp4Duration;
 
-        $fontEsc     = $this->ffmpegEscape($fontPath);
+        $fontBoldEsc    = $this->ffmpegEscape($fontBold);
+        $fontRegularEsc = $this->ffmpegEscape($fontRegular);
         $nameEsc     = $this->ffmpegEscape($doctor->name ?? '');
         $hospitalEsc = $this->ffmpegEscape($request->hospital_name);
         $mobileEsc   = $this->ffmpegEscape($request->mobile);
@@ -214,7 +235,7 @@ class VideoController extends Controller
         $hospitalLabelEsc = $this->ffmpegEscape('Hospital :');
         $mobileLabelEsc = $this->ffmpegEscape('Mobile :');
 
-        // input 0 = frame.mp4, full moving background
+        // input 0 = frame.mp4, full moving background (video + audio)
         // input 1 = uploaded circular photo
         // input 2 = transparent frame.png, always on top
         $filter =
@@ -225,29 +246,58 @@ class VideoController extends Controller
             . "[2:v]scale={$outW}:{$outH},format=rgba,setsar=1[frame];"
             . "[bgvideo][photo]overlay=0:0[withphoto];"
             . "[withphoto][frame]overlay=0:0[framed];"
-            . "[framed]drawtext=fontfile='{$fontEsc}':text='{$doctorLabelEsc}':x={$tDoctor['x']}:y={$tDoctor['y']}:fontsize=25:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontEsc}':text='{$nameLabelEsc}':x={$labelX}:y={$tName['y']}:fontsize=20:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontEsc}':text='{$hospitalLabelEsc}':x={$labelX}:y={$tHospital['y']}:fontsize=20:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontEsc}':text='{$mobileLabelEsc}':x={$labelX}:y={$tMobile['y']}:fontsize=20:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontEsc}':text='{$nameEsc}':x={$tName['x']}:y={$tName['y']}:fontsize=25:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontEsc}':text='{$hospitalEsc}':x={$tHospital['x']}:y={$tHospital['y']}:fontsize=22:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontEsc}':text='{$mobileEsc}':x={$tMobile['x']}:y={$tMobile['y']}:fontsize=22:fontcolor=black,"
-            .   "drawbox=x={$tName['x']}:y=" . ($tName['y'] + $lineOffset) . ":w=" . ($lineEndX - $tName['x']) . ":h=2:color=black:t=fill,"
-            .   "drawbox=x={$tHospital['x']}:y=" . ($tHospital['y'] + $lineOffset) . ":w=" . ($lineEndX - $tHospital['x']) . ":h=2:color=black:t=fill,"
-            .   "drawbox=x={$tMobile['x']}:y=" . ($tMobile['y'] + $lineOffset) . ":w=" . ($lineEndX - $tMobile['x']) . ":h=2:color=black:t=fill[outv]";
+            . "[framed]drawtext=fontfile='{$fontBoldEsc}':text='{$doctorLabelEsc}':x={$tDoctor['x']}:y={$tDoctor['y']}:fontsize={$doctorFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$nameLabelEsc}':x={$labelX}:y={$tName['y']}:fontsize={$labelFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$hospitalLabelEsc}':x={$labelX}:y={$tHospital['y']}:fontsize={$labelFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$mobileLabelEsc}':x={$labelX}:y={$tMobile['y']}:fontsize={$labelFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontRegularEsc}':text='{$nameEsc}':x={$tName['x']}:y={$tName['y']}:fontsize={$nameFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontRegularEsc}':text='{$hospitalEsc}':x={$tHospital['x']}:y={$tHospital['y']}:fontsize={$detailFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontRegularEsc}':text='{$mobileEsc}':x={$tMobile['x']}:y={$tMobile['y']}:fontsize={$detailFontSize}:fontcolor=black,"
+            .   "drawbox=x={$tName['x']}:y=" . ($tName['y'] + $lineOffset) . ":w=" . ($lineEndX - $tName['x']) . ":h={$lineThickness}:color=black:t=fill,"
+            .   "drawbox=x={$tHospital['x']}:y=" . ($tHospital['y'] + $lineOffset) . ":w=" . ($lineEndX - $tHospital['x']) . ":h={$lineThickness}:color=black:t=fill,"
+            .   "drawbox=x={$tMobile['x']}:y=" . ($tMobile['y'] + $lineOffset) . ":w=" . ($lineEndX - $tMobile['x']) . ":h={$lineThickness}:color=black:t=fill[composed];"
+            . "[composed]fps=20[outv]";
 
+        // -map 0:a? = frame.mp4 ka audio track carry karo (agar ho to; '?'
+        // se agar audio stream na ho tab bhi ffmpeg error nahi dega).
+        // Pehle sirf -map "[outv]" tha, jisse audio silently drop ho raha tha.
         $command = "ffmpeg -y "
             . "-i " . escapeshellarg($frameMp4) . " "
             . "-i " . escapeshellarg($circleOverlay) . " "
             . "-i " . escapeshellarg($framePng) . " "
             . "-filter_complex \"{$filter}\" "
-            . "-map \"[outv]\" "
-            . "-c:v libx264 -preset ultrafast -crf 25 -threads 0 "
+            . "-map \"[outv]\" -map 0:a? "
+            // CRF 29 substantially reduces the upload size/time while retaining
+            // good 1080p quality. The source AAC track can be copied unchanged.
+            . "-c:v libx264 -preset ultrafast -crf 29 -threads 0 "
+            . "-c:a copy "
             . "-pix_fmt yuv420p "
             . "-t {$totalDuration} "
             . escapeshellarg($videoPath);
 
         exec($command . " 2>&1", $ffmpegOutput, $returnCode);
+
+        // ─────────────────────────────────────────────────────────────
+        // S3 pe upload — photo, banner, video. Sab sybella-patient-awareness-video/
+        // folder ke andar jaate hain (photo -> uploads/, banner -> banners/, video -> videos/).
+        // ─────────────────────────────────────────────────────────────
+        $photoS3Key  = self::S3_FOLDER . '/uploads/' . $photoName;
+        $videoS3Key  = self::S3_FOLDER . '/videos/' . $videoName;
+
+        $this->uploadFile($photoS3Key, $photoFullPath);
+
+        if (file_exists($videoPath) && $returnCode === 0) {
+            $this->uploadFile($videoS3Key, $videoPath);
+        } else {
+            Log::warning('VideoController: ffmpeg video generation failed, skipping S3 upload.', [
+                'returnCode' => $returnCode,
+                'output'     => $ffmpegOutput,
+            ]);
+        }
+
+        // Local temp cleanup — sirf ye teen files (cache folder ko chhodo)
+        @unlink($photoFullPath);
+        @unlink($videoPath);
 
         // ─── Update Doctor ────────────────────────────────────
         $doctor->update([
@@ -255,16 +305,16 @@ class VideoController extends Controller
             'speciality'    => $request->speciality,
             'hospital_name' => $request->hospital_name,
             'address'       => $request->hospital_address,
-            'profile_image' => $photoPath,
+            'profile_image' => $photoS3Key,
             'language'      => $request->language,
         ]);
 
         // ─── Save DB ──────────────────────────────────────────
         $userFile = UserFile::create([
             'user_id'     => $doctor->id,
-            'photo'       => $photoPath,
-            'banner_path' => 'banners/' . $bannerName,
-            'video'       => 'videos/' . $videoName,
+            'photo'       => $photoS3Key,
+            'banner_path' => null,
+            'video'       => $videoS3Key,
             'language'    => $request->language,
         ]);
 
@@ -276,19 +326,45 @@ class VideoController extends Controller
 
     public function downloadBanner($id)
     {
-        $file       = UserFile::findOrFail($id);
-        $bannerPath = storage_path('app/public/' . $file->banner_path);
-        return response()->download($bannerPath);
+        $file = UserFile::findOrFail($id);
+        $url  = Storage::disk(self::S3_DISK)->temporaryUrl(
+            $file->banner_path,
+            now()->addMinutes(10),
+            [
+                'ResponseContentDisposition' => 'attachment; filename="' . basename($file->banner_path) . '"',
+            ]
+        );
+        return redirect($url);
     }
 
     public function downloadVideo($id)
     {
-        $file      = UserFile::findOrFail($id);
-        $videoPath = storage_path('app/public/' . $file->video);
-        return response()->download($videoPath);
+        $file = UserFile::findOrFail($id);
+        $url  = Storage::disk(self::S3_DISK)->temporaryUrl(
+            $file->video,
+            now()->addMinutes(10),
+            [
+                'ResponseContentDisposition' => 'attachment; filename="' . basename($file->video) . '"',
+            ]
+        );
+        return redirect($url);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────
+
+    private function uploadFile(string $s3Key, string $localPath): void
+    {
+        $stream = fopen($localPath, 'rb');
+        if ($stream === false) {
+            throw new \RuntimeException("Unable to open file for upload: {$localPath}");
+        }
+
+        try {
+            Storage::disk(self::S3_DISK)->put($s3Key, $stream);
+        } finally {
+            fclose($stream);
+        }
+    }
 
     private function createCirclePhotoOverlay(string $photoPath, string $outputPath, int $outW, int $outH): void
     {
@@ -337,7 +413,7 @@ class VideoController extends Controller
             }
         }
 
-        imagepng($overlay, $outputPath, 6);
+        imagepng($overlay, $outputPath, 1);
         imagedestroy($fitted);
         imagedestroy($photo);
         imagedestroy($overlay);
@@ -463,15 +539,29 @@ class VideoController extends Controller
         return $fullPath;
     }
 
-    private function resolveFontPath(): string
+    private function resolveFontPath(string $weight = 'bold'): string
     {
-        $candidates = array_filter([
-            self::FONT_PATH ?: null,
-            public_path('fonts/DejaVuSans-Bold.ttf'),
-            public_path('fonts/Poppins-Bold.ttf'),
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-        ]);
+        $overridePath = $weight === 'regular'
+            ? (self::FONT_REGULAR_PATH ?: self::FONT_PATH)
+            : (self::FONT_BOLD_PATH ?: self::FONT_PATH);
+
+        $candidates = $weight === 'regular'
+            ? array_filter([
+                $overridePath ?: null,
+                public_path('fonts/Poppins-Bold.ttf'),
+                public_path('fonts/HvDTrial_Brandon_Grotesque_regular-BF64a625c9311e1.otf'),
+                public_path('fonts/HvDTrial_Brandon_Grotesque_bold-BF64a625c9151d5.otf'),
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+            ])
+            : array_filter([
+                $overridePath ?: null,
+                public_path('fonts/Poppins-Bold.ttf'),
+                public_path('fonts/HvDTrial_Brandon_Grotesque_bold-BF64a625c9151d5.otf'),
+                public_path('fonts/HvDTrial_Brandon_Grotesque_regular-BF64a625c9311e1.otf'),
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            ]);
 
         foreach ($candidates as $path) {
             if ($path && file_exists($path)) {
@@ -479,10 +569,8 @@ class VideoController extends Controller
             }
         }
 
-        // Koi TTF nahi mili — banner/video text ya to nahi dikhega ya
-        // microscopic bitmap font me dikhega. Log me clearly likh do
-        // taaki ye silently miss na ho.
-        Log::warning('VideoController: no TTF font found — set FONT_PATH to a real .ttf file. Banner/video text will not render correctly.');
+
+        Log::warning("VideoController: no TTF/OTF font found for weight '{$weight}' — set FONT_BOLD_PATH/FONT_REGULAR_PATH to a real font file. Banner/video text will not render correctly.");
 
         return '';
     }

@@ -25,7 +25,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/video-index', [VideoController::class, 'index'])->name('video.index');
     Route::post('/video-store', [VideoController::class, 'store'])->name('video.store');
-    Route::get('/banner/{id}/download', [VideoController::class, 'downloadBanner'])->name('banner.download');
+    // Banner download temporarily disabled.
+    // Route::get('/banner/{id}/download', [VideoController::class, 'downloadBanner'])->name('banner.download');
     Route::get('/video/{id}/download',  [VideoController::class, 'downloadVideo'])->name('video.download');
 
 });

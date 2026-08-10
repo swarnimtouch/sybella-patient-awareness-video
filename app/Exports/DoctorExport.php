@@ -11,6 +11,10 @@ class DoctorExport implements FromCollection, WithHeadings
 {
     protected $search;
 
+    // S3 presigned URLs ki AWS-imposed max validity 7 din hai — isse zyada
+    // nahi ho sakta chahe jo bhi try karo.
+    private const URL_EXPIRY_DAYS = 7;
+
     public function __construct($search = null)
     {
         $this->search = $search;
@@ -62,10 +66,10 @@ class DoctorExport implements FromCollection, WithHeadings
                     optional($employee)->employee_code ?? '',
                     optional($employee)->position_code ?? '',
 
-                    // Media
-                    $file && $file->photo ? asset('storage/'.$file->photo) : '',
-                    $file && $file->banner_path ? asset('storage/'.$file->banner_path) : '',
-                    $file && $file->video ? asset('storage/'.$file->video) : '',
+                    // Media — S3 signed URLs (max 7 din valid, AWS limit)
+                    $this->s3Url($file->photo ?? null),
+                    $this->s3Url($file->banner_path ?? null),
+                    $this->s3Url($file->video ?? null),
 
                     $file->language ?? '',
 
@@ -75,6 +79,18 @@ class DoctorExport implements FromCollection, WithHeadings
                 ];
 
             });
+    }
+
+    private function s3Url(?string $path): string
+    {
+        if (!$path) {
+            return '';
+        }
+
+        return Storage::disk('s3')->temporaryUrl(
+            $path,
+            now()->addDays(self::URL_EXPIRY_DAYS)
+        );
     }
 
     public function headings(): array

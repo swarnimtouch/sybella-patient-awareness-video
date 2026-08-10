@@ -46,7 +46,7 @@
                     <th>Address</th>
                     <th>Language</th>
                     <th>Photo</th>
-                    <th>Banner</th>
+                    {{-- <th>Banner</th> --}}
                     <th>Video</th>
                     <th>Created</th>
                     <th>Action</th>
@@ -56,7 +56,16 @@
                 @forelse($doctors as $index => $doctor)
                     @php
                         $file     = $doctor->userFile;
-                        $photoUrl = $file && $file->photo ? asset('storage/'.$file->photo) : null;
+                        // Files ab S3 pe hai, isliye local asset('storage/...') ki jagah
+                        // signed URL banate hai (30 min valid — page har baar fresh render hota hai).
+                        $photoUrl  = $file && $file->photo
+                            ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->photo, now()->addMinutes(30))
+                            : null;
+                        $videoUrl  = $file && $file->video
+                            ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->video, now()->addMinutes(30), [
+                                'ResponseContentDisposition' => 'attachment; filename="video.mp4"',
+                            ])
+                            : null;
                     @endphp
                     <tr>
                         <td class="serial-cell">{{ $doctors->firstItem() + $index }}</td>
@@ -80,20 +89,22 @@
                             @endif
                         </td>
 
+                        {{-- Banner download temporarily disabled.
                         <td>
-                            @if($file && $file->banner_path)
-                                <a href="{{ asset('storage/'.$file->banner_path) }}"
-                                   download class="btn btn-sm btn-success">
+                            @if($bannerUrl)
+                                <a href="{{ $bannerUrl }}"
+                                   class="btn btn-sm btn-success">
                                     <i class="fas fa-image"></i> Banner
                                 </a>
                             @else —
                             @endif
                         </td>
+                        --}}
 
                         <td>
-                            @if($file && $file->video)
-                                <a href="{{ asset('storage/'.$file->video) }}"
-                                   download class="btn btn-sm btn-primary">
+                            @if($videoUrl)
+                                <a href="{{ $videoUrl }}"
+                                   class="btn btn-sm btn-primary">
                                     <i class="fas fa-video"></i> Video
                                 </a>
                             @else —
@@ -179,8 +190,15 @@
 
         @forelse($doctors as $index => $doctor)
             @php
-                $file     = $doctor->userFile;
-                $photoUrl = $file && $file->photo ? asset('storage/'.$file->photo) : null;
+                $file      = $doctor->userFile;
+                $photoUrl  = $file && $file->photo
+                    ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->photo, now()->addMinutes(30))
+                    : null;
+                $videoUrl  = $file && $file->video
+                    ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->video, now()->addMinutes(30), [
+                        'ResponseContentDisposition' => 'attachment; filename="video.mp4"',
+                    ])
+                    : null;
             @endphp
 
             <div class="m-card" style="animation-delay:{{ $index * 0.04 }}s;">
@@ -293,29 +311,31 @@
                             </div>
                         </div>
 
+                        {{-- Banner download temporarily disabled.
                         <div class="m-field">
                             <div class="m-field-label">
                                 <i class="fas fa-image"></i> Banner
                             </div>
                             <div class="m-field-value">
-                                @if($file && $file->banner_path)
-                                    <a href="{{ asset('storage/'.$file->banner_path) }}"
-                                       download class="btn btn-sm btn-success">
+                                @if($bannerUrl)
+                                    <a href="{{ $bannerUrl }}"
+                                       class="btn btn-sm btn-success">
                                         <i class="fas fa-download"></i> Download
                                     </a>
                                 @else —
                                 @endif
                             </div>
                         </div>
+                        --}}
 
                         <div class="m-field">
                             <div class="m-field-label">
                                 <i class="fas fa-video"></i> Video
                             </div>
                             <div class="m-field-value">
-                                @if($file && $file->video)
-                                    <a href="{{ asset('storage/'.$file->video) }}"
-                                       download class="btn btn-sm btn-primary">
+                                @if($videoUrl)
+                                    <a href="{{ $videoUrl }}"
+                                       class="btn btn-sm btn-primary">
                                         <i class="fas fa-download"></i> Download
                                     </a>
                                 @else —

@@ -105,6 +105,19 @@ class AdminController extends Controller
     {
         $doctor = User::where('type', 'doctor')->findOrFail($id);
 
+        $userFiles = UserFile::where('user_id', $doctor->id)->get();
+
+        // Doctor ke sath judi saari S3 files (photo, banner, video) bhi delete
+        // karo — nahi to DB row hatne ke baad bhi wo bucket me orphan padi
+        // rahengi aur storage cost badhti rahegi.
+        foreach ($userFiles as $userFile) {
+            foreach ([$userFile->photo, $userFile->banner_path, $userFile->video] as $s3Key) {
+                if ($s3Key && Storage::disk('s3')->exists($s3Key)) {
+                    Storage::disk('s3')->delete($s3Key);
+                }
+            }
+        }
+
         UserFile::where('user_id', $doctor->id)->delete();
 
         $doctor->delete();
