@@ -107,23 +107,41 @@ class AdminController extends Controller
 
         $userFiles = UserFile::where('user_id', $doctor->id)->get();
 
-        // Doctor ke sath judi saari S3 files (photo, banner, video) bhi delete
-        // karo — nahi to DB row hatne ke baad bhi wo bucket me orphan padi
-        // rahengi aur storage cost badhti rahegi.
+        // S3 se doctor ki photo, banner aur video delete karo
         foreach ($userFiles as $userFile) {
-            foreach ([$userFile->photo, $userFile->banner_path, $userFile->video] as $s3Key) {
+            foreach ([
+                         $userFile->photo,
+                         $userFile->banner_path,
+                         $userFile->video
+                     ] as $s3Key) {
+
                 if ($s3Key && Storage::disk('s3')->exists($s3Key)) {
                     Storage::disk('s3')->delete($s3Key);
                 }
             }
         }
 
+        // UserFile records delete karo
         UserFile::where('user_id', $doctor->id)->delete();
 
-        $doctor->delete();
+        // Doctor ki profile image bhi S3 se delete karo
+        if ($doctor->profile_image && Storage::disk('s3')->exists($doctor->profile_image)) {
+            Storage::disk('s3')->delete($doctor->profile_image);
+        }
+
+        // Doctor ka main User record delete nahi hoga.
+        // Sirf ye profile fields clear hongi.
+        $doctor->update([
+            'mobile'        => null,
+            'speciality'    => null,
+            'hospital_name' => null,
+            'address'       => null,
+            'profile_image' => null,
+            'language'      => null,
+        ]);
 
         return redirect()->route('admin.doctors.index')
-            ->with('success', 'Doctor deleted successfully');
+            ->with('success', 'Doctor data deleted successfully');
     }
 
     public function doctor_export(Request $request)
