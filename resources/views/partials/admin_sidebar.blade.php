@@ -28,7 +28,7 @@
            class="nav-item-link {{ request()->routeIs('admin.doctors.index') ? 'active' : '' }}">
             <span class="nav-icon"><i class="fas fa-user-md"></i></span>
             Doctors
-            <span class="nav-badge">{{ $totalUserFiles }}</span>
+            <span class="nav-badge">{{ $doctorCount }}</span>
         </a>
 
     </div>
