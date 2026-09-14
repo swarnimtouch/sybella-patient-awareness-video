@@ -15,4 +15,9 @@ class UserFile extends Model
         'language',
         'status',
     ];
+
+    public function doctor()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }

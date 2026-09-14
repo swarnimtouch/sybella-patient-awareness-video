@@ -111,9 +111,9 @@
                                 <i class="fa-solid fa-language left-icon"></i>
                                 <select name="language" class="form-select py-2">
                                     <option value="" selected disabled>-- Select Language --</option>
-                                    <option value="English">English</option>
-                                    <option value="Hindi">Hindi</option>
-                                    <option value="Marathi">Marathi</option>
+                                    @foreach($languages as $language)
+                                        <option value="{{ $language }}">{{ $language }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>

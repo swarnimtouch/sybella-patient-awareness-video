@@ -71,34 +71,30 @@ class AdminController extends Controller
 
     public function doctor(Request $request)
     {
-        $doctors = User::where('type', 'doctor')
-            ->whereHas('userFile')
-            ->with(['userFile', 'employee'])
-
+        $userFiles = UserFile::query()
+            ->whereHas('doctor', fn ($query) => $query->where('type', 'doctor'))
+            ->with(['doctor.employee'])
             ->when($request->search, function ($q) use ($request) {
                 $search = $request->search;
 
-                $q->where(function ($query) use ($search) {
-
-                    // 🔍 Doctor fields
-                    $query->where('name', 'like', "%$search%")
-                        ->orWhere('mobile', 'like', "%$search%")
-                        ->orWhere('speciality', 'like', "%$search%")
-                        ->orWhere('hospital_name', 'like', "%$search%")
-                        ->orWhere('address', 'like', "%$search%")
-
-                        // 🔍 Employee fields
-                        ->orWhereHas('employee', function ($q2) use ($search) {
-                            $q2->where('name', 'like', "%$search%")
-                                ->orWhere('employee_code', 'like', "%$search%");
+                $q->whereHas('doctor', function ($query) use ($search) {
+                    $query->where(function ($doctorQuery) use ($search) {
+                        $doctorQuery->where('name', 'like', "%$search%")
+                            ->orWhere('mobile', 'like', "%$search%")
+                            ->orWhere('speciality', 'like', "%$search%")
+                            ->orWhere('hospital_name', 'like', "%$search%")
+                            ->orWhere('address', 'like', "%$search%")
+                            ->orWhereHas('employee', function ($employeeQuery) use ($search) {
+                                $employeeQuery->where('name', 'like', "%$search%")
+                                    ->orWhere('employee_code', 'like', "%$search%");
+                            });
                         });
                 });
             })
-
             ->latest()
             ->paginate(10);
 
-        return view('admin.doctors', compact('doctors'));
+        return view('admin.doctors', compact('userFiles'));
     }
 
     public function doctor_destroy($id)

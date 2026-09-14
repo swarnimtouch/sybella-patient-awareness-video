@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\UserFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class VideoController extends Controller
@@ -40,9 +42,18 @@ class VideoController extends Controller
     private const FONT_REGULAR_PATH = '';
 
     private const LANGUAGE_VIDEOS = [
-        'English' => 'video/frame.mp4',
-        'Hindi' => 'video/frame.mp4',
-        'Marathi' => 'video/frame.mp4',
+        'Assamese'  => 'video/utbiom-2-assamese.mp4',
+        'Bengali'   => 'video/utbiom-2-bengali.mp4',
+        'English'   => 'video/frame.mp4',
+        'Gujarati'  => 'video/utbiom-2-gujarati.mp4',
+        'Hindi'     => 'video/utbiom-2-hindi.mp4',
+        'Kannada'   => 'video/utbiom-2-kannada.mp4',
+        'Malayalam' => 'video/utbiom-2-malayalam.mp4',
+        'Marathi'   => 'video/utbiom-2-marathi.mp4',
+        'Odia'      => 'video/utbiom-2-odia.mp4',
+        'Punjabi'   => 'video/utbiom-2-punjabi.mp4',
+        'Tamil'     => 'video/utbiom-2-tamil.mp4',
+        'Telugu'    => 'video/utbiom-2-telugu.mp4',
     ];
 
     // ─── S3 CONFIG ──────────────────────────────────────────────────
@@ -58,7 +69,9 @@ class VideoController extends Controller
             ->where('type', 'doctor')
             ->get();
 
-        return view('video.index', compact('doctors'));
+        $languages = array_keys(self::LANGUAGE_VIDEOS);
+
+        return view('video.index', compact('doctors', 'languages'));
     }
 
     public function store(Request $request)
@@ -76,7 +89,7 @@ class VideoController extends Controller
             'speciality'       => 'required',
             'hospital_name'    => 'required',
             'hospital_address' => 'required',
-            'language'         => 'required|in:English,Hindi,Marathi',
+            'language'         => ['required', Rule::in(array_keys(self::LANGUAGE_VIDEOS))],
             'photo'            => 'required|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
@@ -339,12 +352,15 @@ class VideoController extends Controller
 
     public function downloadVideo($id)
     {
-        $file = UserFile::findOrFail($id);
+        $file = UserFile::with('doctor:id,name')->findOrFail($id);
+        $doctorName = Str::slug($file->doctor?->name ?? '');
+        $downloadName = ($doctorName ?: 'doctor-' . $file->user_id) . '.mp4';
+
         $url  = Storage::disk(self::S3_DISK)->temporaryUrl(
             $file->video,
             now()->addMinutes(10),
             [
-                'ResponseContentDisposition' => 'attachment; filename="' . basename($file->video) . '"',
+                'ResponseContentDisposition' => 'attachment; filename="' . $downloadName . '"',
             ]
         );
         return redirect($url);

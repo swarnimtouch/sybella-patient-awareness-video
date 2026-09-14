@@ -66,7 +66,7 @@ class User extends Authenticatable
     }
     public function userFile()
     {
-        return $this->hasOne(UserFile::class, 'user_id');
+        return $this->hasOne(UserFile::class, 'user_id')->latestOfMany();
     }
     public function employee()
     {

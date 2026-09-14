@@ -53,22 +53,17 @@
                 </tr>
                 </thead>
                 <tbody>
-                @forelse($doctors as $index => $doctor)
+                @forelse($userFiles as $index => $file)
                     @php
-                        $file     = $doctor->userFile;
+                        $doctor = $file->doctor;
                         // Files ab S3 pe hai, isliye local asset('storage/...') ki jagah
                         // signed URL banate hai (30 min valid — page har baar fresh render hota hai).
                         $photoUrl  = $file && $file->photo
                             ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->photo, now()->addMinutes(30))
                             : null;
-                        $videoUrl  = $file && $file->video
-                            ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->video, now()->addMinutes(30), [
-                                'ResponseContentDisposition' => 'attachment; filename="video.mp4"',
-                            ])
-                            : null;
                     @endphp
                     <tr>
-                        <td class="serial-cell">{{ $doctors->firstItem() + $index }}</td>
+                        <td class="serial-cell">{{ $userFiles->firstItem() + $index }}</td>
 
                         <td>{{ $doctor->employee->name ?? '—' }}</td>
                         <td>{{ $doctor->employee->employee_code ?? '—' }}</td>
@@ -102,8 +97,8 @@
                         --}}
 
                         <td>
-                            @if($videoUrl)
-                                <a href="{{ $videoUrl }}"
+                            @if($file && $file->video)
+                                <a href="{{ route('video.download', $file->id) }}"
                                    class="btn btn-sm btn-primary">
                                     <i class="fas fa-video"></i> Video
                                 </a>
@@ -112,7 +107,7 @@
                         </td>
 
                         <td class="text-muted-sm" style="font-size:0.75rem;">
-                            {{ $doctor->created_at->timezone('Asia/Kolkata')->format('d M Y, h:i A') }}
+                            {{ $file?->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A') ?? '—' }}
                         </td>
 
                         <td>
@@ -155,26 +150,26 @@
             </table>
         </div>
 
-        @if($doctors->hasPages())
+        @if($userFiles->hasPages())
             <div class="pagination-wrap">
                 <div class="page-info">
-                    Showing {{ $doctors->firstItem() }}–{{ $doctors->lastItem() }} of {{ $doctors->total() }}
+                    Showing {{ $userFiles->firstItem() }}–{{ $userFiles->lastItem() }} of {{ $userFiles->total() }}
                 </div>
                 <div class="custom-pagination">
-                    @if($doctors->onFirstPage())
+                    @if($userFiles->onFirstPage())
                         <span class="page-btn" style="opacity:0.4;cursor:not-allowed;">
                             <i class="fas fa-chevron-left"></i></span>
                     @else
-                        <a href="{{ $doctors->previousPageUrl() }}" class="page-btn">
+                        <a href="{{ $userFiles->previousPageUrl() }}" class="page-btn">
                             <i class="fas fa-chevron-left"></i></a>
                     @endif
-                    @foreach($doctors->getUrlRange(1, $doctors->lastPage()) as $page => $url)
+                    @foreach($userFiles->getUrlRange(1, $userFiles->lastPage()) as $page => $url)
                         <a href="{{ $url }}"
-                           class="page-btn {{ $page == $doctors->currentPage() ? 'active' : '' }}">
+                           class="page-btn {{ $page == $userFiles->currentPage() ? 'active' : '' }}">
                             {{ $page }}</a>
                     @endforeach
-                    @if($doctors->hasMorePages())
-                        <a href="{{ $doctors->nextPageUrl() }}" class="page-btn">
+                    @if($userFiles->hasMorePages())
+                        <a href="{{ $userFiles->nextPageUrl() }}" class="page-btn">
                             <i class="fas fa-chevron-right"></i></a>
                     @else
                         <span class="page-btn" style="opacity:0.4;cursor:not-allowed;">
@@ -188,16 +183,11 @@
     {{-- ════ MOBILE CARDS ════ --}}
     <div class="mobile-view">
 
-        @forelse($doctors as $index => $doctor)
+        @forelse($userFiles as $index => $file)
             @php
-                $file      = $doctor->userFile;
+                $doctor = $file->doctor;
                 $photoUrl  = $file && $file->photo
                     ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->photo, now()->addMinutes(30))
-                    : null;
-                $videoUrl  = $file && $file->video
-                    ? \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($file->video, now()->addMinutes(30), [
-                        'ResponseContentDisposition' => 'attachment; filename="video.mp4"',
-                    ])
                     : null;
             @endphp
 
@@ -214,7 +204,7 @@
                             <i class="fas fa-phone"></i> {{ $doctor->mobile ?? '—' }}
                         </div>
                     </div>
-                    <span class="m-card-serial-badge">#{{ $doctors->firstItem() + $index }}</span>
+                    <span class="m-card-serial-badge">#{{ $userFiles->firstItem() + $index }}</span>
                 </div>
 
                 {{-- 1. EMPLOYEE DETAILS --}}
@@ -285,7 +275,7 @@
                                 <i class="fas fa-calendar-alt"></i> Created
                             </div>
                             <div class="m-field-value" style="font-size:0.75rem;">
-                                {{ $doctor->created_at->timezone('Asia/Kolkata')->format('d M Y, h:i A') }}
+                                {{ $file?->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A') ?? '—' }}
                             </div>
                         </div>
                     </div>
@@ -333,8 +323,8 @@
                                 <i class="fas fa-video"></i> Video
                             </div>
                             <div class="m-field-value">
-                                @if($videoUrl)
-                                    <a href="{{ $videoUrl }}"
+                                @if($file && $file->video)
+                                    <a href="{{ route('video.download', $file->id) }}"
                                        class="btn btn-sm btn-primary">
                                         <i class="fas fa-download"></i> Download
                                     </a>
@@ -350,7 +340,7 @@
                 <div class="m-card-footer">
                     <div class="m-card-date">
                         <i class="fas fa-clock me-1"></i>
-                        {{ $doctor->created_at->timezone('Asia/Kolkata')->format('d M Y, h:i A') }}
+                        {{ $file?->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A') ?? '—' }}
                     </div>
                     <form action="{{ route('admin.doctors.destroy', $doctor->id) }}"
                           method="POST" class="delete-form">
@@ -384,26 +374,26 @@
             </div>
         </div>
 
-        @if($doctors->hasPages())
+        @if($userFiles->hasPages())
             <div class="pagination-wrap" style="border:none;padding:4px 0 16px;">
                 <div class="page-info">
-                    {{ $doctors->firstItem() }}–{{ $doctors->lastItem() }} of {{ $doctors->total() }}
+                    {{ $userFiles->firstItem() }}–{{ $userFiles->lastItem() }} of {{ $userFiles->total() }}
                 </div>
                 <div class="custom-pagination">
-                    @if($doctors->onFirstPage())
+                    @if($userFiles->onFirstPage())
                         <span class="page-btn" style="opacity:0.4;">
                             <i class="fas fa-chevron-left"></i></span>
                     @else
-                        <a href="{{ $doctors->previousPageUrl() }}" class="page-btn">
+                        <a href="{{ $userFiles->previousPageUrl() }}" class="page-btn">
                             <i class="fas fa-chevron-left"></i></a>
                     @endif
-                    @foreach($doctors->getUrlRange(1, $doctors->lastPage()) as $page => $url)
+                    @foreach($userFiles->getUrlRange(1, $userFiles->lastPage()) as $page => $url)
                         <a href="{{ $url }}"
-                           class="page-btn {{ $page == $doctors->currentPage() ? 'active' : '' }}">
+                           class="page-btn {{ $page == $userFiles->currentPage() ? 'active' : '' }}">
                             {{ $page }}</a>
                     @endforeach
-                    @if($doctors->hasMorePages())
-                        <a href="{{ $doctors->nextPageUrl() }}" class="page-btn">
+                    @if($userFiles->hasMorePages())
+                        <a href="{{ $userFiles->nextPageUrl() }}" class="page-btn">
                             <i class="fas fa-chevron-right"></i></a>
                     @else
                         <span class="page-btn" style="opacity:0.4;">
