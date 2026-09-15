@@ -50,6 +50,7 @@ $(document).ready(function() {
         ignore: [],
         rules: {
             doctor_id: { required: true },
+            doctor_name: { required: true, maxlength: 255 },
             speciality: { required: true },
             hospital_name: { required: true },
             hospital_address: { required: true },
@@ -64,6 +65,10 @@ $(document).ready(function() {
         },
         messages: {
             doctor_id: { required: "Please select a doctor" },
+            doctor_name: {
+                required: "Please enter doctor name",
+                maxlength: "Doctor name cannot exceed 255 characters"
+            },
             speciality: { required: "Please enter speciality" },
             hospital_name: { required: "Please enter hospital name" },
             hospital_address: { required: "Please enter hospital address" },
@@ -121,7 +126,22 @@ $(document).ready(function() {
             let selectedId = $(this).val();
             let doc = window.doctorsData.find(d => d.id == selectedId);
             $('#msl').val(doc ? doc.msl_number : '');
+
+            const doctorNameField = $('#doctorNameEditField');
+            const doctorNameInput = $('#doctorNameInput');
+
+            if (doc) {
+                doctorNameInput.val(doc.name).prop('disabled', false);
+                doctorNameField.removeClass('d-none');
+            } else {
+                doctorNameInput.val('').prop('disabled', true);
+                doctorNameField.addClass('d-none');
+            }
         });
+
+        if ($('select[name="doctor_id"]').val()) {
+            $('select[name="doctor_id"]').trigger('change');
+        }
     }
 
     /* ========== Round Photo Cropper Logic ========== */

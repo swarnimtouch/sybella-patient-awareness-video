@@ -67,7 +67,7 @@ class VideoController extends Controller
 
         $doctors = User::where('parent_id', $employeeId)
             ->where('type', 'doctor')
-            ->get();
+            ->get(['id', 'name', 'msl_number']);
 
         $languages = array_keys(self::LANGUAGE_VIDEOS);
 
@@ -85,6 +85,7 @@ class VideoController extends Controller
 
         $request->validate([
             'doctor_id'        => 'required',
+            'doctor_name'      => 'required|string|max:255',
             'mobile'           => 'required',
             'speciality'       => 'required',
             'hospital_name'    => 'required',
@@ -240,10 +241,10 @@ class VideoController extends Controller
 
         $fontBoldEsc    = $this->ffmpegEscape($fontBold);
         $fontRegularEsc = $this->ffmpegEscape($fontRegular);
-        $nameEsc     = $this->ffmpegEscape($doctor->name ?? '');
+        $nameEsc     = $this->ffmpegEscape($request->doctor_name);
         $hospitalEsc = $this->ffmpegEscape($request->hospital_name);
         $mobileEsc   = $this->ffmpegEscape($request->mobile);
-        $doctorLabelEsc = $this->ffmpegEscape('Dr. ' . ($doctor->name ?? ''));
+        $doctorLabelEsc = $this->ffmpegEscape('Dr. ' . $request->doctor_name);
         $nameLabelEsc = $this->ffmpegEscape('Name :');
         $hospitalLabelEsc = $this->ffmpegEscape('Hospital :');
         $mobileLabelEsc = $this->ffmpegEscape('Mobile :');
@@ -314,6 +315,7 @@ class VideoController extends Controller
 
         // ─── Update Doctor ────────────────────────────────────
         $doctor->update([
+            'name'          => $request->doctor_name,
             'mobile'        => $request->mobile,
             'speciality'    => $request->speciality,
             'hospital_name' => $request->hospital_name,

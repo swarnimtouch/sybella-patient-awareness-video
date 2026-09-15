@@ -59,9 +59,23 @@
                                 <select name="doctor_id" class="form-select py-2">
                                     <option value="">-- Select Doctor --</option>
                                     @foreach($doctors as $doc)
-                                        <option value="{{ $doc->id }}">{{ $doc->name }}</option>
+                                        <option value="{{ $doc->id }}" @selected(old('doctor_id') == $doc->id)>{{ $doc->name }}</option>
                                     @endforeach
                                 </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-4 d-none" id="doctorNameEditField">
+                            <label class="auth-form-label mb-1">Edit Doctor Name</label>
+                            <div class="icon-input-wrapper">
+                                <i class="fa-solid fa-user-pen left-icon"></i>
+                                <input type="text"
+                                       name="doctor_name"
+                                       id="doctorNameInput"
+                                       value="{{ old('doctor_name') }}"
+                                       class="form-control py-2"
+                                       placeholder="Edit Doctor Name"
+                                       disabled>
                             </div>
                         </div>
 
