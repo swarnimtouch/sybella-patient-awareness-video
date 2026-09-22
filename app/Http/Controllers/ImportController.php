@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Imports\UsersImport;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
+use Throwable;
 
 class ImportController extends Controller
 {
@@ -23,14 +26,43 @@ class ImportController extends Controller
         $validated = $request->validate([
             'import_type' => ['required', Rule::in(['employee', 'doctor'])],
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+            'progress_id' => ['nullable', 'uuid'],
         ]);
 
         $type = $validated['import_type'];
-        $import = new UsersImport($type);
+        $progressId = $validated['progress_id'] ?? null;
+        $import = new UsersImport($type, $progressId);
 
-        Excel::import($import, $request->file('file'));
+        $import->publishProgress();
 
-        $summary = $import->summary();
+        try {
+            Excel::import($import, $request->file('file'));
+            $summary = $import->summary();
+            $import->publishProgress('completed');
+        } catch (Throwable $exception) {
+            if ($progressId) {
+                Cache::store('file')->put(
+                    UsersImport::progressKey($progressId),
+                    array_merge($import->summary(), [
+                        'status' => 'failed',
+                        'message' => 'Import failed. Please check the file and try again.',
+                    ]),
+                    now()->addHour()
+                );
+            }
+
+            report($exception);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Import failed. Please check the file and try again.',
+                ], 500);
+            }
+
+            return back()->withErrors([
+                'file' => 'Import failed. Please check the file and try again.',
+            ]);
+        }
 
         $message = sprintf(
             '%s import completed: %d inserted, %d updated, %d skipped.',
@@ -40,8 +72,30 @@ class ImportController extends Controller
             $summary['skipped']
         );
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'summary' => $summary,
+            ]);
+        }
+
         return back()
             ->with('success', $message)
             ->with('import_summary', $summary);
+    }
+
+    public function progress(string $progressId): JsonResponse
+    {
+        $progress = Cache::store('file')->get(
+            UsersImport::progressKey($progressId)
+        );
+
+        return response()->json($progress ?? [
+            'status' => 'waiting',
+            'processed' => 0,
+            'inserted' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+        ]);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -26,14 +27,17 @@ class UsersImport implements ToCollection, WithChunkReading, WithHeadingRow
 
     protected array $issues = [];
 
-    public function __construct(string $importType = 'employee')
+    protected ?string $progressId;
+
+    public function __construct(string $importType = 'employee', ?string $progressId = null)
     {
         $this->importType = $importType;
+        $this->progressId = $progressId;
     }
 
     public function chunkSize(): int
     {
-        return 500;
+        return 1000;
     }
 
     public function collection(Collection $rows): void
@@ -47,8 +51,14 @@ class UsersImport implements ToCollection, WithChunkReading, WithHeadingRow
                 } else {
                     $this->upsertDoctor($row);
                 }
+
+                if ($this->processed() % 100 === 0) {
+                    $this->publishProgress();
+                }
             }
         });
+
+        $this->publishProgress();
     }
 
     public function summary(): array
@@ -58,8 +68,27 @@ class UsersImport implements ToCollection, WithChunkReading, WithHeadingRow
             'inserted' => $this->inserted,
             'updated' => $this->updated,
             'skipped' => $this->skipped,
+            'processed' => $this->processed(),
             'issues' => $this->issues,
         ];
+    }
+
+    public static function progressKey(string $progressId): string
+    {
+        return "user-import-progress:{$progressId}";
+    }
+
+    public function publishProgress(string $status = 'processing'): void
+    {
+        if (! $this->progressId) {
+            return;
+        }
+
+        Cache::store('file')->put(
+            self::progressKey($this->progressId),
+            array_merge($this->summary(), ['status' => $status]),
+            now()->addHour()
+        );
     }
 
     private function upsertEmployee(array|\ArrayAccess $row): void
@@ -213,5 +242,10 @@ class UsersImport implements ToCollection, WithChunkReading, WithHeadingRow
         if (count($this->issues) < 20) {
             $this->issues[] = "Row {$this->currentRow}: {$message}";
         }
+    }
+
+    private function processed(): int
+    {
+        return $this->inserted + $this->updated + $this->skipped;
     }
 }

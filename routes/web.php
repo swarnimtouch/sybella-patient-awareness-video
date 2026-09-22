@@ -16,6 +16,9 @@ Route::get('/admin', function () {
 });
 Route::get('/employee', [ImportController::class, 'import'])->name('employee');
 Route::post('/import-users', [ImportController::class, 'importUsers'])->name('users.import');
+Route::get('/import-users/progress/{progressId}', [ImportController::class, 'progress'])
+    ->whereUuid('progressId')
+    ->name('users.import.progress');
 
 Route::get('/', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
