@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Imports\UsersImport;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ImportController extends Controller
@@ -19,10 +20,28 @@ class ImportController extends Controller
         set_time_limit(0);
         ini_set('memory_limit', '512M');
 
-        $type = $request->input('import_type', 'employee'); // 'employee' ya 'doctor'
+        $validated = $request->validate([
+            'import_type' => ['required', Rule::in(['employee', 'doctor'])],
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+        ]);
 
-        Excel::import(new UsersImport($type), $request->file('file'));
+        $type = $validated['import_type'];
+        $import = new UsersImport($type);
 
-        return back()->with('success', ucfirst($type) . 's imported successfully!');
+        Excel::import($import, $request->file('file'));
+
+        $summary = $import->summary();
+
+        $message = sprintf(
+            '%s import completed: %d inserted, %d updated, %d skipped.',
+            ucfirst($type),
+            $summary['inserted'],
+            $summary['updated'],
+            $summary['skipped']
+        );
+
+        return back()
+            ->with('success', $message)
+            ->with('import_summary', $summary);
     }
 }

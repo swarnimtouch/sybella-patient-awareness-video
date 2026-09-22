@@ -3,16 +3,28 @@
 namespace App\Imports;
 
 use App\Models\User;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Concerns\ToCollection;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
-class UsersImport implements ToCollection, WithHeadingRow, WithChunkReading
+class UsersImport implements ToCollection, WithChunkReading, WithHeadingRow
 {
-    protected array $parentCache = [];
+    protected array $employeeCache = [];
+
     protected string $importType;
+
+    protected int $inserted = 0;
+
+    protected int $updated = 0;
+
+    protected int $skipped = 0;
+
+    protected int $currentRow = 1;
+
+    protected array $issues = [];
 
     public function __construct(string $importType = 'employee')
     {
@@ -21,92 +33,185 @@ class UsersImport implements ToCollection, WithHeadingRow, WithChunkReading
 
     public function chunkSize(): int
     {
-        return 100;
+        return 500;
     }
 
-    public function collection(Collection $rows)
+    public function collection(Collection $rows): void
     {
-        $toInsert = [];
+        DB::transaction(function () use ($rows): void {
+            foreach ($rows as $row) {
+                $this->currentRow++;
 
-        foreach ($rows as $row) {
-            if ($this->importType === 'employee') {
-                $toInsert[] = $this->prepareEmployee($row);
-            } else {
-                $toInsert[] = $this->prepareDoctor($row);
+                if ($this->importType === 'employee') {
+                    $this->upsertEmployee($row);
+                } else {
+                    $this->upsertDoctor($row);
+                }
             }
-        }
-
-        $toInsert = array_filter($toInsert);
-
-        if (!empty($toInsert)) {
-            User::insert($toInsert);
-        }
+        });
     }
 
-    private function prepareEmployee(array|\ArrayAccess $row): ?array
+    public function summary(): array
     {
-        if (empty($row['name'])) return null;
-
-        $parentId = null;
-        if (!empty($row['parent_employee_code'])) {
-            $code = $row['parent_employee_code'];
-            if (!array_key_exists($code, $this->parentCache)) {
-                $this->parentCache[$code] = User::where('employee_code', $code)->value('id');
-            }
-            $parentId = $this->parentCache[$code];
-        }
-
         return [
-            'name'          => $row['name'],
-            'password'      => Hash::make($row['employee_code'], ['rounds' => 4]),
-            'employee_code' => $row['employee_code'] ?? null,
-            'position_code' => $row['position_code'] ?? null,
-            'designation'   => $row['designation'] ?? null,
-            'hq_name'       => $row['hq_name'] ?? null,
-            'hq_code'       => $row['hq_code'] ?? null,
-            'type'          => 'employee',
-            'mobile'        => $row['mobile'] ?? null,
-            'speciality'    => null,
-            'hospital_name' => null,
-            'address'       => null,
-            'msl_number'    => null,
-            'parent_id'     => $parentId,
-            'created_at'    => now(),
-            'updated_at'    => now(),
+            'type' => $this->importType,
+            'inserted' => $this->inserted,
+            'updated' => $this->updated,
+            'skipped' => $this->skipped,
+            'issues' => $this->issues,
         ];
     }
 
-    private function prepareDoctor(array|\ArrayAccess $row): ?array
+    private function upsertEmployee(array|\ArrayAccess $row): void
     {
-        if (empty($row['name'])) return null;
+        $name = $this->value($row, 'name', 'employee_name');
+        $positionCode = $this->value($row, 'position_code');
+        $employeeCode = $this->value($row, 'employee_code');
 
-        $parentId = null;
-        if (!empty($row['employee_code'])) {
-            $code = $row['employee_code'];
-            if (!array_key_exists($code, $this->parentCache)) {
-                $this->parentCache[$code] = User::where('employee_code', $code)->value('id');
-            }
-            $parentId = $this->parentCache[$code];
+        if (! $name || ! $positionCode || ! $employeeCode) {
+            $this->skip('Employee requires name, position_code and employee_code.');
+
+            return;
         }
 
-        return [
-            'name'          => $row['name'],
-            'password'      => 'null',
+        $parentId = null;
+        $parentCode = $this->value($row, 'parent_employee_code');
+        if ($parentCode) {
+            $parentId = $this->employeeIdByCode($parentCode);
+        }
+
+        $employee = User::query()
+            ->where('type', 'employee')
+            ->where('position_code', $positionCode)
+            ->first();
+
+        $attributes = [
+            'name' => $name,
+            'employee_code' => $employeeCode,
+            'position_code' => $positionCode,
+            'designation' => $this->value($row, 'designation'),
+            'hq_name' => $this->value($row, 'hq_name'),
+            'hq_code' => $this->value($row, 'hq_code'),
+            'type' => 'employee',
+            'mobile' => $this->value($row, 'mobile'),
+            'speciality' => null,
+            'speciality_code' => null,
+            'hospital_name' => null,
+            'address' => null,
+            'msl_number' => null,
+            'city' => null,
+            'parent_id' => $parentId,
+        ];
+
+        if ($employee) {
+            if ($employee->employee_code !== $employeeCode) {
+                $attributes['password'] = Hash::make($employeeCode, ['rounds' => 4]);
+            }
+
+            $employee->fill($attributes)->save();
+            $this->updated++;
+        } else {
+            $attributes['password'] = Hash::make($employeeCode, ['rounds' => 4]);
+            $employee = User::create($attributes);
+            $this->inserted++;
+        }
+
+        $this->employeeCache[$employeeCode] = $employee->id;
+    }
+
+    private function upsertDoctor(array|\ArrayAccess $row): void
+    {
+        $name = $this->value($row, 'name', 'doctor_name');
+        $mslNumber = $this->value($row, 'msl_number');
+        $employeeCode = $this->value($row, 'employee_code');
+
+        if (! $name || ! $mslNumber || ! $employeeCode) {
+            $this->skip('Doctor requires name, msl_number and employee_code.');
+
+            return;
+        }
+
+        $parentId = $this->employeeIdByCode($employeeCode);
+        if (! $parentId) {
+            $this->skip("Employee code {$employeeCode} was not found for this doctor.");
+
+            return;
+        }
+
+        $doctor = User::query()
+            ->where('type', 'doctor')
+            ->where('msl_number', $mslNumber)
+            ->first();
+
+        $attributes = [
+            'name' => $name,
             'employee_code' => null,
             'position_code' => null,
-            'designation'   => null,
-            'hq_name'       => null,
-            'hq_code'       => null,
-            'type'          => 'doctor',
-            'mobile'        => $row['doctor_mobile'] ?? null,
-            'speciality'    => $row['speciality'] ?? null,
-            'speciality_code'    => $row['speciality_code'] ?? null,
-            'hospital_name' => $row['hospital_name'] ?? null,
-            'city'       => $row['city'] ?? null,
-            'msl_number'    => $row['msl_number'] ?? null,
-            'parent_id'     => $parentId,
-            'created_at'    => now(),
-            'updated_at'    => now(),
+            'designation' => null,
+            'hq_name' => null,
+            'hq_code' => null,
+            'type' => 'doctor',
+            'mobile' => $this->value($row, 'doctor_mobile', 'mobile'),
+            'speciality' => $this->value($row, 'speciality'),
+            'speciality_code' => $this->value($row, 'speciality_code'),
+            'hospital_name' => $this->value($row, 'hospital_name', 'hospital'),
+            'city' => $this->value($row, 'city'),
+            'msl_number' => $mslNumber,
+            'parent_id' => $parentId,
         ];
+
+        $address = $this->value($row, 'address', 'hospital_address');
+        if ($address) {
+            $attributes['address'] = $address;
+        }
+
+        if ($doctor) {
+            $doctor->fill($attributes)->save();
+            $this->updated++;
+        } else {
+            $attributes['password'] = Hash::make('null', ['rounds' => 4]);
+            User::create($attributes);
+            $this->inserted++;
+        }
+    }
+
+    private function employeeIdByCode(string $employeeCode): ?int
+    {
+        if (! array_key_exists($employeeCode, $this->employeeCache)) {
+            $this->employeeCache[$employeeCode] = User::query()
+                ->where('type', 'employee')
+                ->where('employee_code', $employeeCode)
+                ->value('id');
+        }
+
+        return $this->employeeCache[$employeeCode];
+    }
+
+    private function value(array|\ArrayAccess $row, string ...$keys): ?string
+    {
+        foreach ($keys as $key) {
+            $value = $row[$key] ?? null;
+
+            if ($value === null) {
+                continue;
+            }
+
+            $value = trim((string) $value);
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function skip(string $message): void
+    {
+        $this->skipped++;
+
+        if (count($this->issues) < 20) {
+            $this->issues[] = "Row {$this->currentRow}: {$message}";
+        }
     }
 }

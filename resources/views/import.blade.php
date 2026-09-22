@@ -13,6 +13,26 @@
                 </div>
             @endif
 
+            @if(session('import_summary'))
+                @php($summary = session('import_summary'))
+                <div class="alert alert-info">
+                    <strong>{{ ucfirst($summary['type']) }} import summary</strong>
+                    <div class="mt-2">
+                        <span class="badge bg-success me-2">Inserted: {{ $summary['inserted'] }}</span>
+                        <span class="badge bg-primary me-2">Updated: {{ $summary['updated'] }}</span>
+                        <span class="badge bg-secondary">Skipped: {{ $summary['skipped'] }}</span>
+                    </div>
+
+                    @if(!empty($summary['issues']))
+                        <ul class="mb-0 mt-3">
+                            @foreach($summary['issues'] as $issue)
+                                <li>{{ $issue }}</li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+            @endif
+
             {{-- Error Message --}}
             @if ($errors->any())
                 <div class="alert alert-danger">
@@ -28,9 +48,9 @@
                 @csrf
 
                 <!-- Type select karo -->
-                <select name="import_type">
-                    <option value="employee">Employee</option>
-                    <option value="doctor">Doctor</option>
+                <select name="import_type" required>
+                    <option value="employee" @selected(old('import_type') === 'employee')>Employee</option>
+                    <option value="doctor" @selected(old('import_type') === 'doctor')>Doctor</option>
                 </select>
 
                 <!-- File -->
@@ -42,4 +62,3 @@
         </div>
     </div>
 </div>
-
