@@ -56,7 +56,6 @@
                     <th class="th-doctor">Position Code</th>
                     <th class="th-doctor">Designation</th>
                     <th class="th-employee ">HQ Name</th>
-                    <th class="th-employee">HQ Code</th>
                     <th>Created</th>
                     <th>Action</th>
                 </tr>
@@ -76,7 +75,6 @@
                         <td><span class="badge-mono">{{ $employee->position_code ?? '—' }}</span></td>
                         <td style="font-weight:500;">{{ $employee->designation ?? '—' }}</td>
                         <td class="text-muted-sm">{{ $employee->hq_name ?? '—' }}</td>
-                        <td><span class="badge-mono">{{ $employee->hq_code ?? '—' }}</span></td>
 
                         <td class="text-muted-sm" style="font-size:0.75rem; white-space:nowrap;">
                             {{ $employee->created_at->timezone('Asia/Kolkata')->format('d M Y, h:i A') }}
@@ -100,7 +98,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9">
+                        <td colspan="8">
                             <div class="empty-state">
                                 <i class="fas fa-users"></i>
                                 <h5>No records found</h5>
@@ -112,7 +110,7 @@
 
                 {{-- Shown by JS when live search finds no match --}}
                 <tr id="noSearchResults" style="display:none;">
-                    <td colspan="9">
+                    <td colspan="8">
                         <div class="empty-state">
                             <i class="fas fa-users"></i>
                             <h5>No records found</h5>
@@ -201,13 +199,6 @@
                             <div class="m-field-label"><i class="fas fa-building"></i> HQ Name</div>
                             <div class="m-field-value {{ $employee->hq_name ? '' : 'muted' }}">
                                 {{ $employee->hq_name ?? 'Not set' }}
-                            </div>
-                        </div>
-
-                        <div class="m-field">
-                            <div class="m-field-label"><i class="fas fa-barcode"></i> HQ Code</div>
-                            <div class="m-field-value {{ $employee->hq_code ? '' : 'muted' }}">
-                                {{ $employee->hq_code ?? 'Not set' }}
                             </div>
                         </div>
 

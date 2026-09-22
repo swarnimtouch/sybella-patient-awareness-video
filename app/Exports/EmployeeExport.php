@@ -32,7 +32,6 @@ class EmployeeExport implements FromCollection, WithHeadings
                     $item->position_code ?? '',
                     $item->designation ?? '',
                     $item->hq_name ?? '',
-                    $item->hq_code ?? '',
                 ];
             });
     }
@@ -45,7 +44,6 @@ class EmployeeExport implements FromCollection, WithHeadings
             'Position Code',
             'Designation',
             'HQ Name',
-            'HQ Code',
         ];
     }
 }
