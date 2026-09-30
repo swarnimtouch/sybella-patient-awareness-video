@@ -254,7 +254,15 @@ class VideoController extends Controller
         // input 2 = transparent frame.png, always on top
         $filter =
             "color=c=white:s={$outW}x{$outH}:d={$totalDuration}[base];"
-            . "[0:v]scale={$vw}:{$vh}:force_original_aspect_ratio=increase,crop={$vw}:{$vh},setsar=1[panelvideo];"
+            // Fill the narrow side gutters with a cover layer, then place the
+            // complete source frame above it. This avoids white bars while
+            // keeping top and bottom source text inside the safe video area.
+            . "[0:v]split=2[panelbgsrc][panelfgsrc];"
+            . "[panelbgsrc]scale={$vw}:{$vh}:force_original_aspect_ratio=increase:"
+            . "force_divisible_by=2,crop={$vw}:{$vh},setsar=1[panelbg];"
+            . "[panelfgsrc]scale={$vw}:{$vh}:force_original_aspect_ratio=decrease:"
+            . "force_divisible_by=2,setsar=1[panelfg];"
+            . "[panelbg][panelfg]overlay=({$vw}-w)/2:({$vh}-h)/2:shortest=1[panelvideo];"
             . "[base][panelvideo]overlay={$vx}:{$vy}:shortest=1[bgvideo];"
             . "[1:v]scale={$outW}:{$outH},setsar=1[photo];"
             . "[2:v]scale={$outW}:{$outH},format=rgba,setsar=1[frame];"
@@ -298,16 +306,22 @@ class VideoController extends Controller
         $photoS3Key  = self::S3_FOLDER . '/uploads/' . $photoName;
         $videoS3Key  = self::S3_FOLDER . '/videos/' . $videoName;
 
-        $this->uploadFile($photoS3Key, $photoFullPath);
-
-        if (file_exists($videoPath) && $returnCode === 0) {
-            $this->uploadFile($videoS3Key, $videoPath);
-        } else {
+        if (! file_exists($videoPath) || $returnCode !== 0) {
             Log::warning('VideoController: ffmpeg video generation failed, skipping S3 upload.', [
                 'returnCode' => $returnCode,
                 'output'     => $ffmpegOutput,
             ]);
+
+            @unlink($photoFullPath);
+            @unlink($videoPath);
+
+            throw ValidationException::withMessages([
+                'video' => 'Video generation failed. Please try again.',
+            ]);
         }
+
+        $this->uploadFile($photoS3Key, $photoFullPath);
+        $this->uploadFile($videoS3Key, $videoPath);
 
         // Local temp cleanup — sirf ye teen files (cache folder ko chhodo)
         @unlink($photoFullPath);
