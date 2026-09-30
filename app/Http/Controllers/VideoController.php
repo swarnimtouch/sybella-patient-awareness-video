@@ -32,7 +32,14 @@ class VideoController extends Controller
     private const TEXT_NAME     = ['x' => 3207, 'y' => 3545];
     private const TEXT_HOSPITAL = ['x' => 3212, 'y' => 3739];
     private const TEXT_MOBILE   = ['x' => 3216, 'y' => 3951];
-    private const TEXT_DOCTOR   = ['x' => 372, 'y' => 3905];
+    private const DOCTOR_NAME_AREA = [
+        // Keep the text area centered beneath the 1592px doctor circle.
+        // The larger box is required for the requested 20/12/10px sizes.
+        'x' => 240,
+        'y' => 3834,
+        'width' => 1600,
+        'height' => 300,
+    ];
 
     private const MASTER_W = 8000;
     private const MASTER_H = 4500;
@@ -214,7 +221,6 @@ class VideoController extends Controller
         $tName     = ['x' => (int) round(self::TEXT_NAME['x'] * $scaleX),     'y' => (int) round(self::TEXT_NAME['y'] * $scaleY)];
         $tHospital = ['x' => (int) round(self::TEXT_HOSPITAL['x'] * $scaleX), 'y' => (int) round(self::TEXT_HOSPITAL['y'] * $scaleY)];
         $tMobile   = ['x' => (int) round(self::TEXT_MOBILE['x'] * $scaleX),   'y' => (int) round(self::TEXT_MOBILE['y'] * $scaleY)];
-        $tDoctor   = ['x' => (int) round(self::TEXT_DOCTOR['x'] * $scaleX),   'y' => (int) round(self::TEXT_DOCTOR['y'] * $scaleY)];
         $labelX = (int) round(2700 * $scaleX);
         $lineEndX = (int) round(5600 * $scaleX);
         $lineOffset = max(2, (int) round(125 * $scaleY));
@@ -222,10 +228,39 @@ class VideoController extends Controller
 
         // The previous fixed 1080p font sizes became oversized at 540p.
         $textScale = $outH / 1080;
-        $doctorFontSize = max(12, (int) round(25 * $textScale));
-        $labelFontSize = max(10, (int) round(20 * $textScale));
-        $nameFontSize = max(12, (int) round(25 * $textScale));
-        $detailFontSize = max(11, (int) round(22 * $textScale));
+        // Keep every label/value identical, but slightly smaller so all three
+        // rows sit comfortably inside the white information panel.
+        $formFontSize = max(9, (int) round(20 * $textScale));
+        $fontBoldEsc = $this->ffmpegEscape($fontBold);
+
+        $doctorAreaX = (int) round(self::DOCTOR_NAME_AREA['x'] * $scaleX);
+        $doctorAreaY = (int) round(self::DOCTOR_NAME_AREA['y'] * $scaleY);
+        $doctorAreaWidth = (int) round(self::DOCTOR_NAME_AREA['width'] * $scaleX);
+        $doctorAreaHeight = (int) round(self::DOCTOR_NAME_AREA['height'] * $scaleY);
+        $doctorDisplayName = trim($request->doctor_name);
+        if (! preg_match('/^dr\.?\s+/i', $doctorDisplayName)) {
+            $doctorDisplayName = 'Dr. ' . $doctorDisplayName;
+        }
+        $doctorNameLayout = $this->fitDoctorName(
+            $doctorDisplayName,
+            $fontBold,
+            $doctorAreaWidth,
+            $doctorAreaHeight
+        );
+
+        $doctorNameFilters = [];
+        $doctorTextHeight = (count($doctorNameLayout['lines']) * $doctorNameLayout['fontSize'])
+            + ((count($doctorNameLayout['lines']) - 1) * $doctorNameLayout['lineGap']);
+        $doctorTextY = $doctorAreaY + max(0, (int) floor(($doctorAreaHeight - $doctorTextHeight) / 2));
+
+        foreach ($doctorNameLayout['lines'] as $index => $line) {
+            $lineEsc = $this->ffmpegEscape($line);
+            $lineY = $doctorTextY + ($index * ($doctorNameLayout['fontSize'] + $doctorNameLayout['lineGap']));
+            $doctorNameFilters[] = "drawtext=fontfile='{$fontBoldEsc}':text='{$lineEsc}':"
+                . "x={$doctorAreaX}+({$doctorAreaWidth}-text_w)/2:y={$lineY}:"
+                . "fontsize={$doctorNameLayout['fontSize']}:fontcolor=black";
+        }
+        $doctorNameFilter = implode(',', $doctorNameFilters);
 
         // ─── Video Generate (FFmpeg) ────────────────────────────────────
         $videoName = 'video_' . time() . '.mp4';
@@ -239,12 +274,9 @@ class VideoController extends Controller
         $mp4Duration   = (float) ($probeOut[0] ?? 5);
         $totalDuration = $mp4Duration;
 
-        $fontBoldEsc    = $this->ffmpegEscape($fontBold);
-        $fontRegularEsc = $this->ffmpegEscape($fontRegular);
         $nameEsc     = $this->ffmpegEscape($request->doctor_name);
         $hospitalEsc = $this->ffmpegEscape($request->hospital_name);
         $mobileEsc   = $this->ffmpegEscape($request->mobile);
-        $doctorLabelEsc = $this->ffmpegEscape('Dr. ' . $request->doctor_name);
         $nameLabelEsc = $this->ffmpegEscape('Name :');
         $hospitalLabelEsc = $this->ffmpegEscape('Hospital :');
         $mobileLabelEsc = $this->ffmpegEscape('Mobile :');
@@ -268,13 +300,13 @@ class VideoController extends Controller
             . "[2:v]scale={$outW}:{$outH},format=rgba,setsar=1[frame];"
             . "[bgvideo][photo]overlay=0:0[withphoto];"
             . "[withphoto][frame]overlay=0:0[framed];"
-            . "[framed]drawtext=fontfile='{$fontBoldEsc}':text='{$doctorLabelEsc}':x={$tDoctor['x']}:y={$tDoctor['y']}:fontsize={$doctorFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$nameLabelEsc}':x={$labelX}:y={$tName['y']}:fontsize={$labelFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$hospitalLabelEsc}':x={$labelX}:y={$tHospital['y']}:fontsize={$labelFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$mobileLabelEsc}':x={$labelX}:y={$tMobile['y']}:fontsize={$labelFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontRegularEsc}':text='{$nameEsc}':x={$tName['x']}:y={$tName['y']}:fontsize={$nameFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontRegularEsc}':text='{$hospitalEsc}':x={$tHospital['x']}:y={$tHospital['y']}:fontsize={$detailFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontRegularEsc}':text='{$mobileEsc}':x={$tMobile['x']}:y={$tMobile['y']}:fontsize={$detailFontSize}:fontcolor=black,"
+            . "[framed]{$doctorNameFilter},"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$nameLabelEsc}':x={$labelX}:y={$tName['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$hospitalLabelEsc}':x={$labelX}:y={$tHospital['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$mobileLabelEsc}':x={$labelX}:y={$tMobile['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$nameEsc}':x={$tName['x']}:y={$tName['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$hospitalEsc}':x={$tHospital['x']}:y={$tHospital['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$mobileEsc}':x={$tMobile['x']}:y={$tMobile['y']}:fontsize={$formFontSize}:fontcolor=black,"
             .   "drawbox=x={$tName['x']}:y=" . ($tName['y'] + $lineOffset) . ":w=" . ($lineEndX - $tName['x']) . ":h={$lineThickness}:color=black:t=fill,"
             .   "drawbox=x={$tHospital['x']}:y=" . ($tHospital['y'] + $lineOffset) . ":w=" . ($lineEndX - $tHospital['x']) . ":h={$lineThickness}:color=black:t=fill,"
             .   "drawbox=x={$tMobile['x']}:y=" . ($tMobile['y'] + $lineOffset) . ":w=" . ($lineEndX - $tMobile['x']) . ":h={$lineThickness}:color=black:t=fill[composed];"
@@ -613,5 +645,111 @@ class VideoController extends Controller
         $value = str_replace(':', '\\:', $value);
         $value = str_replace("'", "\\'", $value);
         return $value;
+    }
+
+    private function fitDoctorName(
+        string $text,
+        string $fontPath,
+        int $maxWidth,
+        int $maxHeight
+    ): array {
+        $singleLineSize = 20;
+        $minimumSingleLineSize = 10;
+        $twoLineSize = 12;
+        $veryLongSize = 10;
+        $lineGap = 2;
+        $nameWithoutTitle = trim((string) preg_replace('/^dr\.?\s+/i', '', $text));
+
+        // Up to 15 characters (excluding "Dr.") must always stay on one line.
+        // Use the largest size up to 20px that fits the available width.
+        if (Str::length($nameWithoutTitle) <= 15) {
+            for ($fontSize = $singleLineSize; $fontSize >= $minimumSingleLineSize; $fontSize--) {
+                if ($this->textWidth($text, $fontPath, $fontSize) <= $maxWidth
+                    && $fontSize <= $maxHeight) {
+                    return [
+                        'lines' => [$text],
+                        'fontSize' => $fontSize,
+                        'lineGap' => $lineGap,
+                    ];
+                }
+            }
+
+            return [
+                'lines' => [$text],
+                'fontSize' => $minimumSingleLineSize,
+                'lineGap' => $lineGap,
+            ];
+        }
+
+        if (Str::length($nameWithoutTitle) > 30) {
+            return [
+                'lines' => $this->balanceTextAcrossTwoLines($text, $fontPath, $veryLongSize),
+                'fontSize' => $veryLongSize,
+                'lineGap' => $lineGap,
+            ];
+        }
+
+        $twoLines = $this->balanceTextAcrossTwoLines($text, $fontPath, $twoLineSize);
+        $twoLineHeight = (2 * $twoLineSize) + $lineGap;
+        if (count($twoLines) === 2
+            && $twoLineHeight <= $maxHeight
+            && max(
+                $this->textWidth($twoLines[0], $fontPath, $twoLineSize),
+                $this->textWidth($twoLines[1], $fontPath, $twoLineSize)
+            ) <= $maxWidth) {
+            return [
+                'lines' => $twoLines,
+                'fontSize' => $twoLineSize,
+                'lineGap' => $lineGap,
+            ];
+        }
+
+        return [
+            'lines' => $this->balanceTextAcrossTwoLines($text, $fontPath, $veryLongSize),
+            'fontSize' => $veryLongSize,
+            'lineGap' => $lineGap,
+        ];
+    }
+
+    private function balanceTextAcrossTwoLines(string $text, string $fontPath, int $fontSize): array
+    {
+        $words = preg_split('/\s+/', trim($text)) ?: [$text];
+        if (count($words) < 2) {
+            return [trim($text)];
+        }
+
+        $bestLines = [trim($text)];
+        $bestWidthDifference = PHP_INT_MAX;
+
+        for ($split = 1; $split < count($words); $split++) {
+            $lines = [
+                implode(' ', array_slice($words, 0, $split)),
+                implode(' ', array_slice($words, $split)),
+            ];
+            $widthDifference = abs(
+                $this->textWidth($lines[0], $fontPath, $fontSize)
+                - $this->textWidth($lines[1], $fontPath, $fontSize)
+            );
+
+            if ($widthDifference < $bestWidthDifference) {
+                $bestWidthDifference = $widthDifference;
+                $bestLines = $lines;
+            }
+        }
+
+        return $bestLines;
+    }
+
+    private function textWidth(string $text, string $fontPath, int $fontSize): int
+    {
+        if ($fontPath !== '' && function_exists('imagettfbbox')) {
+            $box = imagettfbbox($fontSize, 0, $fontPath, $text);
+
+            if (is_array($box)) {
+                return abs($box[2] - $box[0]);
+            }
+        }
+
+        return (int) ceil(strlen($text) * $fontSize * 0.6);
     }
 }
