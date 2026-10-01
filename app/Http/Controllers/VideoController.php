@@ -43,6 +43,8 @@ class VideoController extends Controller
 
     private const MASTER_W = 8000;
     private const MASTER_H = 4500;
+    private const FORM_FONT_SIZE = 11;
+    private const FORM_FONT_FILE = 'fonts/Roboto-SemiBold.ttf';
 
     private const FONT_PATH = '';
     private const FONT_BOLD_PATH = '';
@@ -127,6 +129,10 @@ class VideoController extends Controller
 
         $fontBold    = $this->resolveFontPath('bold');
         $fontRegular = $this->resolveFontPath('regular');
+        $fontForm = public_path(self::FORM_FONT_FILE);
+        if (! is_file($fontForm)) {
+            $fontForm = $fontBold;
+        }
 
         // ─── Banner Generate (GD, full high-res 8000x4500) ────────────
         // Banner download is disabled, so skip its expensive 8000x4500 render.
@@ -226,12 +232,10 @@ class VideoController extends Controller
         $lineOffset = max(2, (int) round(125 * $scaleY));
         $lineThickness = max(1, (int) round(2 * ($outH / 1080)));
 
-        // The previous fixed 1080p font sizes became oversized at 540p.
-        $textScale = $outH / 1080;
-        // Keep every label/value identical, but slightly smaller so all three
-        // rows sit comfortably inside the white information panel.
-        $formFontSize = max(9, (int) round(20 * $textScale));
-        $fontBoldEsc = $this->ffmpegEscape($fontBold);
+        // Every form label and value uses this one exact size. Do not derive
+        // it from the text length or resolution, otherwise fields can differ.
+        $formFontSize = self::FORM_FONT_SIZE;
+        $fontFormEsc = $this->ffmpegEscape($fontForm);
 
         $doctorAreaX = (int) round(self::DOCTOR_NAME_AREA['x'] * $scaleX);
         $doctorAreaY = (int) round(self::DOCTOR_NAME_AREA['y'] * $scaleY);
@@ -243,7 +247,7 @@ class VideoController extends Controller
         }
         $doctorNameLayout = $this->fitDoctorName(
             $doctorDisplayName,
-            $fontBold,
+            $fontForm,
             $doctorAreaWidth,
             $doctorAreaHeight
         );
@@ -256,7 +260,7 @@ class VideoController extends Controller
         foreach ($doctorNameLayout['lines'] as $index => $line) {
             $lineEsc = $this->ffmpegEscape($line);
             $lineY = $doctorTextY + ($index * ($doctorNameLayout['fontSize'] + $doctorNameLayout['lineGap']));
-            $doctorNameFilters[] = "drawtext=fontfile='{$fontBoldEsc}':text='{$lineEsc}':"
+            $doctorNameFilters[] = "drawtext=fontfile='{$fontFormEsc}':text='{$lineEsc}':"
                 . "x={$doctorAreaX}+({$doctorAreaWidth}-text_w)/2:y={$lineY}:"
                 . "fontsize={$doctorNameLayout['fontSize']}:fontcolor=black";
         }
@@ -301,12 +305,12 @@ class VideoController extends Controller
             . "[bgvideo][photo]overlay=0:0[withphoto];"
             . "[withphoto][frame]overlay=0:0[framed];"
             . "[framed]{$doctorNameFilter},"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$nameLabelEsc}':x={$labelX}:y={$tName['y']}:fontsize={$formFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$hospitalLabelEsc}':x={$labelX}:y={$tHospital['y']}:fontsize={$formFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$mobileLabelEsc}':x={$labelX}:y={$tMobile['y']}:fontsize={$formFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$nameEsc}':x={$tName['x']}:y={$tName['y']}:fontsize={$formFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$hospitalEsc}':x={$tHospital['x']}:y={$tHospital['y']}:fontsize={$formFontSize}:fontcolor=black,"
-            .   "drawtext=fontfile='{$fontBoldEsc}':text='{$mobileEsc}':x={$tMobile['x']}:y={$tMobile['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontFormEsc}':text='{$nameLabelEsc}':x={$labelX}:y={$tName['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontFormEsc}':text='{$hospitalLabelEsc}':x={$labelX}:y={$tHospital['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontFormEsc}':text='{$mobileLabelEsc}':x={$labelX}:y={$tMobile['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontFormEsc}':text='{$nameEsc}':x={$tName['x']}:y={$tName['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontFormEsc}':text='{$hospitalEsc}':x={$tHospital['x']}:y={$tHospital['y']}:fontsize={$formFontSize}:fontcolor=black,"
+            .   "drawtext=fontfile='{$fontFormEsc}':text='{$mobileEsc}':x={$tMobile['x']}:y={$tMobile['y']}:fontsize={$formFontSize}:fontcolor=black,"
             .   "drawbox=x={$tName['x']}:y=" . ($tName['y'] + $lineOffset) . ":w=" . ($lineEndX - $tName['x']) . ":h={$lineThickness}:color=black:t=fill,"
             .   "drawbox=x={$tHospital['x']}:y=" . ($tHospital['y'] + $lineOffset) . ":w=" . ($lineEndX - $tHospital['x']) . ":h={$lineThickness}:color=black:t=fill,"
             .   "drawbox=x={$tMobile['x']}:y=" . ($tMobile['y'] + $lineOffset) . ":w=" . ($lineEndX - $tMobile['x']) . ":h={$lineThickness}:color=black:t=fill[composed];"
@@ -653,30 +657,18 @@ class VideoController extends Controller
         int $maxWidth,
         int $maxHeight
     ): array {
-        $singleLineSize = 20;
-        $minimumSingleLineSize = 10;
+        $singleLineSize = 15;
         $twoLineSize = 12;
         $veryLongSize = 10;
         $lineGap = 2;
         $nameWithoutTitle = trim((string) preg_replace('/^dr\.?\s+/i', '', $text));
 
-        // Up to 15 characters (excluding "Dr.") must always stay on one line.
-        // Use the largest size up to 20px that fits the available width.
+        // Up to 15 characters (excluding "Dr.") always use one fixed size.
+        // Do not auto-shrink individual names, otherwise each video looks different.
         if (Str::length($nameWithoutTitle) <= 15) {
-            for ($fontSize = $singleLineSize; $fontSize >= $minimumSingleLineSize; $fontSize--) {
-                if ($this->textWidth($text, $fontPath, $fontSize) <= $maxWidth
-                    && $fontSize <= $maxHeight) {
-                    return [
-                        'lines' => [$text],
-                        'fontSize' => $fontSize,
-                        'lineGap' => $lineGap,
-                    ];
-                }
-            }
-
             return [
                 'lines' => [$text],
-                'fontSize' => $minimumSingleLineSize,
+                'fontSize' => $singleLineSize,
                 'lineGap' => $lineGap,
             ];
         }
